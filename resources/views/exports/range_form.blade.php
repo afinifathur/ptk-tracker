@@ -1,0 +1,1 @@
+<x-layouts.app><h2>Range Form</h2></x-layouts.app>

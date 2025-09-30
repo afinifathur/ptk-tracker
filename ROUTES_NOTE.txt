@@ -1,0 +1,3 @@
+// NOTE: Route POST /ptk/import will be added by replacing routes/web.php in PLUS overlay.
+// This PRO overlay assumes that route exists already from PLUS. If not, you can add:
+// Route::post('ptk-import', [PTKController::class, 'import'])->name('ptk.import')->middleware('throttle:uploads');

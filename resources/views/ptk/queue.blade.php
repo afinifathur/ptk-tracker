@@ -1,0 +1,1 @@
+<x-layouts.app><h2>Queue</h2></x-layouts.app>

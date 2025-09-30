@@ -1,0 +1,2 @@
+// Add to routes/web.php inside auth group if not present:
+Route::post('ptk-import', [PTKController::class, 'import'])->name('ptk.import')->middleware('throttle:uploads');

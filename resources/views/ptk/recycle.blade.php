@@ -1,0 +1,1 @@
+<x-layouts.app><h2>Recycle Bin</h2></x-layouts.app>

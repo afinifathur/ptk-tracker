@@ -1,0 +1,1 @@
+<x-layouts.app><h2>Kanban</h2></x-layouts.app>
