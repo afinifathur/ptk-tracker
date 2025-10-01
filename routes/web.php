@@ -1,18 +1,57 @@
 <?php
+
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\{DashboardController, PTKController, ApprovalController, ExportController};
-Route::get('/', fn()=>redirect()->route('dashboard'));
-Route::middleware(['auth'])->group(function(){
-    Route::get('/dashboard',[DashboardController::class,'index'])->name('dashboard');
+use App\Http\Controllers\{
+    DashboardController,
+    PTKController,
+    ApprovalController,
+    ExportController
+};
+
+Route::get('/', fn () => redirect()->route('dashboard'));
+
+Route::middleware('auth')->group(function () {
+    // Dashboard
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+    // PTK CRUD
     Route::resource('ptk', PTKController::class);
-    Route::get('ptk-kanban',[PTKController::class,'kanban'])->name('ptk.kanban');
-    Route::get('ptk-queue',[PTKController::class,'queue'])->name('ptk.queue');
-    Route::get('ptk-recycle',[PTKController::class,'recycle'])->name('ptk.recycle');
-    Route::post('ptk/{ptk}/restore',[PTKController::class,'restore'])->name('ptk.restore');
-    Route::post('ptk/{ptk}/status',[PTKController::class,'quickStatus'])->name('ptk.status');
-    Route::post('ptk/{ptk}/approve',[ApprovalController::class,'approve'])->name('ptk.approve');
-    Route::post('ptk/{ptk}/reject',[ApprovalController::class,'reject'])->name('ptk.reject');
-    Route::get('exports/range',[ExportController::class,'rangeForm'])->name('exports.range.form');
-    Route::post('exports/range',[ExportController::class,'rangeReport'])->name('exports.range.report');
+
+    // Kanban + status cepat
+    Route::get('ptk-kanban', [PTKController::class, 'kanban'])->name('ptk.kanban');
+    Route::post('ptk/{ptk}/status', [PTKController::class, 'quickStatus'])->name('ptk.status');
+
+    // Antrian persetujuan (stage optional: approver|director)
+    Route::get('ptk-queue/{stage?}', [PTKController::class, 'queue'])
+        ->whereIn('stage', ['approver', 'director'])
+        ->name('ptk.queue');
+
+    // Recycle bin + restore + hapus permanen
+    Route::get('ptk-recycle', [PTKController::class, 'recycle'])->name('ptk.recycle');
+    Route::post('ptk/{id}/restore', [PTKController::class, 'restore'])->name('ptk.restore');
+    Route::delete('ptk/{id}/force', [PTKController::class, 'forceDelete'])->name('ptk.force');
+
+    // PTK Import (dibatasi rate khusus upload)
+    Route::post('ptk-import', [PTKController::class, 'import'])
+        ->name('ptk.import')
+        ->middleware('throttle:uploads');
+
+    // Approval
+    Route::post('ptk/{ptk}/approve', [ApprovalController::class, 'approve'])->name('ptk.approve');
+    Route::post('ptk/{ptk}/reject',  [ApprovalController::class, 'reject'])->name('ptk.reject');
+
+    // Exports
+    Route::prefix('exports')->name('exports.')->group(function () {
+        // Form & laporan rentang tanggal
+        Route::get('range',  [ExportController::class, 'rangeForm'])->name('range.form');
+        Route::post('range', [ExportController::class, 'rangeReport'])->name('range.report');
+
+        // File exports
+        Route::get('excel',        [ExportController::class, 'excel'])->name('excel');
+        Route::get('pdf/{ptk}',    [ExportController::class, 'pdf'])->name('pdf');
+        Route::post('range/excel', [ExportController::class, 'rangeExcel'])->name('range.excel');
+        Route::post('range/pdf',   [ExportController::class, 'rangePdf'])->name('range.pdf');
+    });
 });
-require __DIR__.'/auth.php';
+
+require __DIR__ . '/auth.php';

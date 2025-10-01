@@ -10,6 +10,11 @@ use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
+    public function ptkAsPic()
+{
+    return $this->hasMany(\App\Models\PTK::class, 'pic_user_id');
+}
+
     use HasApiTokens, HasFactory, Notifiable;
 
     /**
