@@ -3,17 +3,18 @@
 namespace App\Exports;
 
 use App\Models\PTK;
+use Illuminate\Http\Request;
 use Maatwebsite\Excel\Concerns\{FromCollection,WithHeadings,WithMapping};
 
-class RangeExport implements FromCollection, WithHeadings, WithMapping
+class PTKExport implements FromCollection, WithHeadings, WithMapping
 {
-    public function __construct(protected string $start, protected string $end) {}
+    public function __construct(protected Request $request) {}
 
     public function collection()
     {
-        return PTK::with(['pic','department','category'])
-            ->whereBetween('created_at', [$this->start, $this->end])
-            ->latest()->get();
+        $q = PTK::with(['pic','department','category'])->latest();
+        if ($s = $this->request->get('status')) $q->where('status',$s);
+        return $q->get();
     }
 
     public function headings(): array

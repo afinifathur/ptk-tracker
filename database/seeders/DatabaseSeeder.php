@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-// use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
@@ -12,11 +11,12 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // \App\Models\User::factory(10)->create();
+        // Panggil seeder inisialisasi lain kalau ada
+        if (class_exists(\Database\Seeders\InitSeeder::class)) {
+            $this->call(\Database\Seeders\InitSeeder::class);
+        }
 
-        // \App\Models\User::factory()->create([
-        //     'name' => 'Test User',
-        //     'email' => 'test@example.com',
-        // ]);
+        // Registrasikan & jalankan PTKInitSeeder
+        $this->call(\Database\Seeders\PTKInitSeeder::class);
     }
 }
