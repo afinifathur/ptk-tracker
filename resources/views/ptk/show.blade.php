@@ -1,15 +1,53 @@
 <x-layouts.app>
+  @php
+    $isCompleted = $ptk->status === 'Completed';
+  @endphp
+
   <div class="flex items-center justify-between mb-4">
     <h2 class="text-xl font-semibold">PTK {{ $ptk->number }}</h2>
+
     <div class="space-x-2">
-      <a href="{{ route('ptk.edit', $ptk) }}" class="px-3 py-2 bg-blue-600 text-white rounded">Edit</a>
+      {{-- Edit --}}
+      <a href="{{ route('ptk.edit', $ptk) }}"
+         class="px-3 py-2 bg-blue-600 text-white rounded">
+        Edit
+      </a>
 
-      <a href="{{ route('exports.pdf', $ptk) }}" class="px-3 py-2 bg-gray-700 text-white rounded">Unduh PDF</a>
+      {{-- Unduh PDF --}}
+      <a href="{{ route('exports.pdf', $ptk) }}"
+         class="px-3 py-2 bg-gray-700 text-white rounded">
+        Unduh PDF
+      </a>
 
+      {{-- Approve / Reject (hanya tampil jika belum Completed) --}}
+      @unless($isCompleted)
+        <form class="inline" method="post" action="{{ route('ptk.approve', $ptk) }}">
+          @csrf
+          <button class="px-3 py-2 bg-emerald-600 text-white rounded"
+                  title="Setujui & tandai selesai">
+            Approve
+          </button>
+        </form>
+
+        <form class="inline" method="post" action="{{ route('ptk.reject', $ptk) }}">
+          @csrf
+          <input type="hidden" name="reason" value="Revisi">
+          <button class="px-3 py-2 bg-rose-600 text-white rounded"
+                  title="Kembalikan untuk revisi"
+                  onclick="return confirm('Kembalikan untuk revisi?');">
+            Reject
+          </button>
+        </form>
+      @endunless
+
+      {{-- Delete --}}
       <form method="post" action="{{ route('ptk.destroy', $ptk) }}" class="inline">
         @csrf
         @method('DELETE')
-        <button class="px-3 py-2 bg-rose-600 text-white rounded" onclick="return confirm('Hapus?')">Delete</button>
+        <button class="px-3 py-2 bg-rose-600 text-white rounded"
+                onclick="return confirm('Hapus?')">
+          Delete
+        </button>
       </form>
     </div>
   </div>

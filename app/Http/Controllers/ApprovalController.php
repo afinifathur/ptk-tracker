@@ -1,40 +1,44 @@
 <?php
+
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use App\Models\PTK;
+use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
 
 class ApprovalController extends Controller
 {
-    public function approve(Request $request, PTK $ptk)
+    /**
+     * Menyetujui PTK (Kabag) dan menandai sebagai selesai.
+     */
+    public function approve(Request $request, PTK $ptk): RedirectResponse
     {
-        // Sederhana: jika belum ada approver_id -> isi; kalau sudah ada -> director_id
-        if (is_null($ptk->approver_id)) {
-            $ptk->approver_id = auth()->id();
-            // bisa sekaligus ubah status
-            if ($ptk->status === 'Not Started') $ptk->status = 'In Progress';
-        } else {
-            $ptk->director_id = auth()->id();
-            if ($ptk->status !== 'Completed') {
-                $ptk->status = 'Completed';
-                $ptk->approved_at = now();
-            }
-        }
-        $ptk->save();
-        return back()->with('ok','PTK di-approve.');
+        $ptk->update([
+            'approver_id' => $request->user()->id,
+            'approved_at' => now(),
+            'status'      => 'Completed',
+        ]);
+
+        return back()->with('ok', 'PTK disetujui & selesai.');
     }
 
-    public function reject(Request $request, PTK $ptk)
+    /**
+     * Menolak PTK dan mengembalikan untuk revisi.
+     */
+    public function reject(Request $request, PTK $ptk): RedirectResponse
     {
-        $request->validate(['reason'=>'nullable|string|max:500']);
-        // Reset persetujuan dan kembalikan ke Not Started
-        $ptk->update([
-            'approver_id'=>null,
-            'director_id'=>null,
-            'approved_at'=>null,
-            'status'=>'Not Started',
+        $request->validate([
+            'reason' => ['nullable', 'string', 'max:500'],
         ]);
-        // TODO: simpan reason ke kolom/riwayat bila dibutuhkan.
-        return back()->with('ok','PTK dikembalikan untuk revisi.');
+
+        $ptk->update([
+            'approver_id' => null,
+            'approved_at' => null,
+            'status'      => 'In Progress', // atau 'Not Started' sesuai kebijakan
+        ]);
+
+        // Catatan: simpan $request->reason ke kolom/riwayat jika diperlukan.
+
+        return back()->with('ok', 'PTK dikembalikan untuk revisi.');
     }
 }

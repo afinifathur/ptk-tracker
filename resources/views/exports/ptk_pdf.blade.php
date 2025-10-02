@@ -52,6 +52,13 @@
   </div>
   @endif
 
+  @if(!empty($qrBase64))
+  <div style="position:absolute; right:20px; top:20px; text-align:center;">
+    <img src="{{ $qrBase64 }}" style="width:120px; height:120px;">
+    <div style="font-size:9px; width:120px; word-wrap:break-word;">Verifikasi: {{ $verifyUrl }}</div>
+  </div>
+@endif
+
   <footer>
     Audit: printed {{ now()->format('Y-m-d H:i:s') }}, by {{ auth()->user()->email ?? 'system' }}, IP {{ request()->ip() }} — Hash: {{ $docHash }}
   </footer>

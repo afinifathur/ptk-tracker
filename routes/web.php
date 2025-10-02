@@ -51,7 +51,15 @@ Route::middleware('auth')->group(function () {
         Route::get('pdf/{ptk}',    [ExportController::class, 'pdf'])->name('pdf');
         Route::post('range/excel', [ExportController::class, 'rangeExcel'])->name('range.excel');
         Route::post('range/pdf',   [ExportController::class, 'rangePdf'])->name('range.pdf');
+
+        // routes/web.php (dalam group auth)
+        Route::get('/audits', [\App\Http\Controllers\AuditController::class,'index'])->name('audits.index');
+
     });
 });
+
+// routes/web.php (di luar middleware auth agar bisa dipindai publik di LAN)
+Route::get('/verify/{ptk}/{hash}', [\App\Http\Controllers\VerifyController::class,'show'])->name('verify.show');
+
 
 require __DIR__ . '/auth.php';
