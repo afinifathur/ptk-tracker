@@ -9,7 +9,8 @@
       <form method="post" action="{{ route('ptk.destroy', $ptk) }}" class="inline">
         @csrf
         @method('DELETE')
-        <button class="px-3 py-2 bg-rose-600 text-white rounded" onclick="return confirm('Hapus?')">Delete</button>
+        <button type="submit" class="px-3 py-2 bg-rose-600 text-white rounded"
+                onclick="return confirm('Hapus?')">Delete</button>
       </form>
     </div>
   </div>
@@ -23,7 +24,11 @@
       <x-ui.stat-badge :status="$ptk->status" />
 
       <div class="mt-3 text-sm text-gray-500">Kategori / Departemen</div>
-      <div>{{ $ptk->category->name ?? '-' }} / {{ $ptk->department->name ?? '-' }}</div>
+      <div>
+        {{ $ptk->category->name ?? '-' }}
+        @if($ptk->subcategory) / {{ $ptk->subcategory->name }} @endif
+        / {{ $ptk->department->name ?? '-' }}
+      </div>
 
       <div class="mt-3 text-sm text-gray-500">PIC</div>
       <div>{{ $ptk->pic->name ?? '-' }}</div>
@@ -40,7 +45,7 @@
       <ul class="list-disc ml-5">
         @forelse($ptk->attachments as $a)
           <li>
-            <a class="underline" href="{{ asset('storage/'.$a->path) }}" target="_blank">
+            <a class="underline" href="{{ asset('storage/'.$a->path) }}" target="_blank" rel="noopener">
               {{ $a->original_name }}
             </a>
           </li>

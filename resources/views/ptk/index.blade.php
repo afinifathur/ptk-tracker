@@ -36,6 +36,7 @@
         <th>Judul</th>
         <th>PIC</th>
         <th>Departemen</th>
+        <th>Kategori</th> {{-- kolom baru --}}
         <th>Status</th>
         <th>Due</th>
         <th>Aksi</th>
@@ -49,8 +50,17 @@
           <td class="truncate max-w-[280px]">{{ $p->title }}</td>
           <td>{{ $p->pic->name ?? '-' }}</td>
           <td>{{ $p->department->name ?? '-' }}</td>
+
+          {{-- Kategori / Subkategori --}}
           <td>
-            @php $s=$p->status; @endphp
+            {{ $p->category->name ?? '-' }}
+            @if($p->subcategory)
+              / <span class="text-xs text-gray-500">{{ $p->subcategory->name }}</span>
+            @endif
+          </td>
+
+          <td>
+            @php $s = $p->status; @endphp
             <x-ui.stat-badge :status="$s" />
           </td>
           <td>{{ optional($p->due_date)->format('Y-m-d') }}</td>

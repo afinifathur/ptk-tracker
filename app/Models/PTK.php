@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Models\{Category, Department, User, Attachment};
+use App\Models\{Category, Subcategory, Department, User, Attachment};
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\{BelongsTo, HasMany};
@@ -20,12 +20,24 @@ class PTK extends Model implements AuditableContract
 
     /**
      * Kolom yang boleh di-mass assign.
+     *
+     * Pastikan migration memiliki kolom: subcategory_id.
+     *
+     * @var array<int, string>
      */
     protected $fillable = [
-        'number', 'title', 'description',
-        'category_id', 'department_id', 'pic_user_id',
-        'status', 'due_date', 'approved_at',
-        'approver_id', 'director_id',
+        'number',
+        'title',
+        'description',
+        'category_id',
+        'subcategory_id',
+        'department_id',
+        'pic_user_id',
+        'status',
+        'due_date',
+        'approved_at',
+        'approver_id',
+        'director_id',
     ];
 
     /**
@@ -38,12 +50,22 @@ class PTK extends Model implements AuditableContract
 
     /**
      * Kolom yang diikutkan dalam audit.
+     *
+     * @var array<int, string>
      */
     protected array $auditInclude = [
-        'number', 'title', 'description',
-        'category_id', 'department_id', 'pic_user_id',
-        'status', 'due_date', 'approved_at',
-        'approver_id', 'director_id',
+        'number',
+        'title',
+        'description',
+        'category_id',
+        'subcategory_id',
+        'department_id',
+        'pic_user_id',
+        'status',
+        'due_date',
+        'approved_at',
+        'approver_id',
+        'director_id',
     ];
 
     // ========================
@@ -53,6 +75,11 @@ class PTK extends Model implements AuditableContract
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
+    }
+
+    public function subcategory(): BelongsTo
+    {
+        return $this->belongsTo(Subcategory::class);
     }
 
     public function department(): BelongsTo

@@ -20,6 +20,7 @@ class PTKController extends Controller
             'pic:id,name',
             'department:id,name',
             'category:id,name',
+            'subcategory:id,name',
         ])->latest();
 
         if ($request->filled('status')) {
@@ -57,14 +58,15 @@ class PTKController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'number'        => 'required|unique:ptks,number',
-            'title'         => 'required|string|max:255',
-            'description'   => 'required|string',
-            'category_id'   => 'required|exists:categories,id',
-            'department_id' => 'required|exists:departments,id',
-            'pic_user_id'   => 'required|exists:users,id',
-            'due_date'      => 'required|date',
-            'attachments.*' => 'file|mimes:jpg,jpeg,png,pdf|max:5120',
+            'number'         => 'required|unique:ptks,number',
+            'title'          => 'required|string|max:255',
+            'description'    => 'required|string',
+            'category_id'    => 'required|exists:categories,id',
+            'subcategory_id' => 'nullable|exists:subcategories,id',
+            'department_id'  => 'required|exists:departments,id',
+            'pic_user_id'    => 'required|exists:users,id',
+            'due_date'       => 'required|date',
+            'attachments.*'  => 'file|mimes:jpg,jpeg,png,pdf|max:5120',
         ]);
 
         $data['status'] = 'Not Started';
@@ -87,7 +89,7 @@ class PTKController extends Controller
      */
     public function show(PTK $ptk)
     {
-        $ptk->load(['attachments', 'pic', 'department', 'category']);
+        $ptk->load(['attachments', 'pic', 'department', 'category', 'subcategory']);
 
         return view('ptk.show', compact('ptk'));
     }
@@ -111,19 +113,20 @@ class PTKController extends Controller
     public function update(Request $request, PTK $ptk)
     {
         $data = $request->validate([
-            'title'         => 'required|string|max:255',
-            'description'   => 'required|string',
-            'category_id'   => 'required|exists:categories,id',
-            'department_id' => 'required|exists:departments,id',
-            'pic_user_id'   => 'required|exists:users,id',
-            'due_date'      => 'required|date',
-            'status'        => 'required|in:Not Started,In Progress,Completed',
-            'attachments.*' => 'file|mimes:jpg,jpeg,png,pdf|max:5120',
+            'title'          => 'required|string|max:255',
+            'description'    => 'required|string',
+            'category_id'    => 'required|exists:categories,id',
+            'subcategory_id' => 'nullable|exists:subcategories,id',
+            'department_id'  => 'required|exists:departments,id',
+            'pic_user_id'    => 'required|exists:users,id',
+            'due_date'       => 'required|date',
+            'status'         => 'required|in:Not Started,In Progress,Completed',
+            'attachments.*'  => 'file|mimes:jpg,jpeg,png,pdf|max:5120',
         ]);
 
         $ptk->update($data);
 
-        // Tambahan: handle attachments baru
+        // Handle attachments baru (opsional)
         if ($request->hasFile('attachments')) {
             $svc = app(AttachmentService::class);
             foreach ($request->file('attachments') as $file) {
@@ -149,14 +152,14 @@ class PTKController extends Controller
      */
     public function kanban()
     {
-        $cols = ['Not Started','In Progress','Completed'];
+        $cols = ['Not Started', 'In Progress', 'Completed'];
 
         $items = PTK::with(['pic:id,name','department:id,name'])
-            ->orderBy('updated_at','desc')
+            ->orderBy('updated_at', 'desc')
             ->get()
             ->groupBy('status');
 
-        return view('ptk.kanban', compact('cols','items'));
+        return view('ptk.kanban', compact('cols', 'items'));
     }
 
     /**
@@ -181,20 +184,18 @@ class PTKController extends Controller
     public function queue(?string $stage = null)
     {
         $q = PTK::with(['pic:id,name','department:id,name'])
-            ->whereIn('status', ['Not Started','In Progress']);
+            ->whereIn('status', ['Not Started', 'In Progress']);
 
         if ($stage === 'approver') {
-            // Contoh rule: belum ada approver_id
             $q->whereNull('approver_id');
         } elseif ($stage === 'director') {
-            // Sudah disetujui approver, tapi belum director
             $q->whereNotNull('approver_id')
               ->whereNull('director_id');
         }
 
         $items = $q->latest()->paginate(20)->withQueryString();
 
-        return view('ptk.queue', compact('items','stage'));
+        return view('ptk.queue', compact('items', 'stage'));
     }
 
     /**

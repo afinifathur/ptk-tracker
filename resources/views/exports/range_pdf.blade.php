@@ -1,39 +1,57 @@
 <!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
-  <style> body { font-family: DejaVu Sans, sans-serif; font-size: 12px; } h3 { margin-bottom:4px; } </style>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: DejaVu Sans, sans-serif; font-size: 12px; color: #111; }
+    h2   { margin: 0 0 6px; }
+    p.small { margin: 0 0 10px; font-size: 11px; color: #555; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #666; padding: 6px 8px; vertical-align: top; }
+    th { background: #eee; }
+    .w-title { width: 38%; }
+  </style>
 </head>
 <body>
   <h2>Laporan Periode {{ $data['start'] }} s.d. {{ $data['end'] }}</h2>
-  <h3>Top 3 Kategori</h3>
-  <ol>
-  @foreach($topCategories as $catId=>$count)
-    <li>{{ \App\Models\Category::find($catId)->name ?? 'N/A' }} — {{ $count }}</li>
-  @endforeach
-  </ol>
 
-  <h3>Top 3 Departemen</h3>
-  <ol>
-  @foreach($topDepartments as $deptId=>$count)
-    <li>{{ \App\Models\Department::find($deptId)->name ?? 'N/A' }} — {{ $count }}</li>
-  @endforeach
-  </ol>
+  {{-- Filter ringkas (menggunakan ID/label yang diterima controller) --}}
+  <p class="small">
+    Filter:
+    Kategori: {{ $data['category_id'] ?? 'Semua' }},
+    Subkategori: {{ $data['subcategory_id'] ?? 'Semua' }},
+    Departemen: {{ $data['department_id'] ?? 'Semua' }},
+    Status: {{ $data['status'] ?? 'Semua' }}
+  </p>
 
-  <h3>Overdue</h3>
-  <ul>
-    @forelse($overdue as $p)
-      <li>{{ $p->number }} — {{ $p->title }} (PIC: {{ $p->pic->name ?? '-' }})</li>
-    @empty
-      <li>Tidak ada.</li>
-    @endforelse
-  </ul>
+  {{-- Optional: fingerprint dokumen --}}
+  @isset($docHash)
+    <p class="small">Fingerprint: {{ $docHash }}</p>
+  @endisset
 
-  <h3>Daftar PTK</h3>
-  <table width="100%" border="1" cellspacing="0" cellpadding="4">
-    <thead><tr><th>Nomor</th><th>Judul</th><th>PIC</th><th>Dept</th><th>Status</th></tr></thead>
+  <table>
+    <thead>
+      <tr>
+        <th>Nomor</th>
+        <th class="w-title">Judul</th>
+        <th>Dept</th>
+        <th>Kategori</th>
+        <th>Subkategori</th>
+        <th>Status</th>
+        <th>Due</th>
+      </tr>
+    </thead>
     <tbody>
       @foreach($items as $p)
-        <tr><td>{{ $p->number }}</td><td>{{ $p->title }}</td><td>{{ $p->pic->name ?? '-' }}</td><td>{{ $p->department->name ?? '-' }}</td><td>{{ $p->status }}</td></tr>
+        <tr>
+          <td>{{ $p->number }}</td>
+          <td>{{ $p->title }}</td>
+          <td>{{ $p->department->name ?? '-' }}</td>
+          <td>{{ $p->category->name ?? '-' }}</td>
+          <td>{{ $p->subcategory->name ?? '-' }}</td>
+          <td>{{ $p->status }}</td>
+          <td>{{ optional($p->due_date)->format('Y-m-d') }}</td>
+        </tr>
       @endforeach
     </tbody>
   </table>
