@@ -16,44 +16,74 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+
+  {{-- Optional: sembunyikan elemen ber-x-cloak sampai Alpine siap --}}
+  <style>[x-cloak]{display:none !important;}</style>
 </head>
 <body class="h-full bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
   <div class="max-w-7xl mx-auto p-6">
+
+    {{-- =======================
+         HEADER (replaced)
+       ======================= --}}
     <header class="flex items-center justify-between mb-6">
+      {{-- Kiri: Judul --}}
       <h1 class="text-2xl font-bold">PTK Tracker</h1>
 
-      <nav class="space-x-4" role="navigation" aria-label="Main">
-        <a href="{{ route('dashboard') }}" class="hover:underline">Dashboard</a>
-        <a href="{{ route('ptk.index') }}" class="hover:underline">Daftar PTK</a>
-        <a href="{{ route('ptk.kanban') }}" class="hover:underline">Kanban</a>
-
-        <a href="{{ route('ptk.queue') }}" class="relative hover:underline">
-          Antrian Persetujuan
-          @if(($queueCount ?? 0) > 0)
-            <span
-              class="absolute -top-2 -right-3 inline-flex items-center justify-center h-5 min-w-[20px] px-1
-                     rounded-full bg-red-600 text-white text-xs leading-none"
-              aria-label="Jumlah antrian">
-              {{ $queueCount }}
-            </span>
-          @endif
-        </a>
-
-        <a href="{{ route('ptk.recycle') }}" class="hover:underline">Recycle Bin</a>
-        <a href="{{ route('exports.range.form') }}" class="hover:underline">Laporan Periode</a>
-        <a href="{{ route('exports.audits.index') }}" class="hover:underline">Audit Log</a>
-        <a href="{{ route('settings.categories') }}" class="hover:underline">Settings</a>
+      {{-- Tengah: Navigasi --}}
+      <nav class="hidden md:flex space-x-4">
+        <a href="{{ route('dashboard') }}">Dashboard</a>
+        <a href="{{ route('ptk.index') }}">Daftar PTK</a>
+        @can('ptk.create')
+          <a href="{{ route('ptk.create') }}">New PTK</a>
+        @endcan
+        @can('menu.queue')
+          <a href="{{ route('ptk.queue') }}">Antrian Persetujuan</a>
+        @endcan
+        @can('menu.recycle')
+          <a href="{{ route('ptk.recycle') }}">Recycle Bin</a>
+        @endcan
+        <a href="{{ route('exports.range.form') }}">Laporan Periode</a>
+        @can('menu.audit')
+          <a href="{{ route('exports.audits.index') }}">Audit Log</a>
+        @endcan
+        @role('director')
+          <a href="{{ route('settings.categories') }}">Settings</a>
+        @endrole
       </nav>
 
-      <button
-        type="button"
-        class="px-3 py-2 rounded bg-gray-200 dark:bg-gray-800"
-        x-on:click="dark = !dark; localStorage.setItem('theme', dark ? 'dark' : 'light'); document.documentElement.classList.toggle('dark', dark)"
-        x-bind:aria-pressed="dark.toString()"
-        aria-label="Toggle theme">
-        <span x-show="!dark">🌙 Dark</span>
-        <span x-show="dark">☀️ Light</span>
-      </button>
+      {{-- Kanan: Theme toggle + User Dropdown --}}
+      <div class="flex items-center space-x-3 relative" x-data="{open:false}">
+        <button class="px-3 py-2 rounded bg-gray-200 dark:bg-gray-800"
+          x-on:click="dark=!dark; localStorage.setItem('theme', dark?'dark':'light'); document.documentElement.classList.toggle('dark', dark)">
+          <span x-show="!dark">🌙</span><span x-show="dark">☀️</span>
+        </button>
+
+        {{-- Dropdown User --}}
+        <div class="relative">
+          <button x-on:click="open=!open" class="flex items-center space-x-2 px-3 py-2 bg-gray-200 dark:bg-gray-800 rounded hover:bg-gray-300 dark:hover:bg-gray-700">
+            <span class="font-semibold">{{ auth()->user()->name }}</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {{-- Popup --}}
+          <div x-show="open" x-transition x-cloak
+            class="absolute right-0 mt-2 w-44 bg-white dark:bg-gray-800 border rounded-lg shadow-lg py-2 z-50">
+            <div class="px-4 py-2 text-sm text-gray-700 dark:text-gray-200 border-b">
+              <div class="font-semibold">{{ auth()->user()->name }}</div>
+              <div class="text-xs text-gray-500">{{ auth()->user()->roles->pluck('name')->join(', ') }}</div>
+            </div>
+            <form method="POST" action="{{ route('logout') }}" class="mt-1">
+              @csrf
+              <button type="submit" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
+                🚪 Logout
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
     </header>
 
     @if(session('ok'))

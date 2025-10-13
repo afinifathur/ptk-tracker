@@ -2,23 +2,34 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    public function ptkAsPic()
-{
-    return $this->hasMany(\App\Models\PTK::class, 'pic_user_id');
-}
-
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable, HasRoles;
 
     /**
-     * The attributes that are mass assignable.
+     * Relasi ke model PTK (sebagai PIC)
+     */
+    public function ptkAsPic()
+    {
+        return $this->hasMany(\App\Models\PTK::class, 'pic_user_id');
+    }
+
+    /**
+     * Relasi ke model Department
+     */
+    public function department()
+    {
+        return $this->belongsTo(\App\Models\Department::class);
+    }
+
+    /**
+     * Atribut yang dapat diisi secara massal
      *
      * @var array<int, string>
      */
@@ -29,7 +40,7 @@ class User extends Authenticatable
     ];
 
     /**
-     * The attributes that should be hidden for serialization.
+     * Atribut yang disembunyikan saat serialisasi
      *
      * @var array<int, string>
      */
@@ -39,7 +50,7 @@ class User extends Authenticatable
     ];
 
     /**
-     * The attributes that should be cast.
+     * Atribut yang dikonversi secara otomatis
      *
      * @var array<string, string>
      */

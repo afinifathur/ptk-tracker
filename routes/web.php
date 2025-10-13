@@ -27,13 +27,17 @@ Route::middleware('auth')->group(function () {
     Route::get('ptk-kanban', [PTKController::class, 'kanban'])->name('ptk.kanban');
     Route::post('ptk/{ptk}/status', [PTKController::class, 'quickStatus'])->name('ptk.status');
 
-    // Antrian persetujuan (stage optional: approver|director)
+    // Antrian persetujuan (stage optional: approver|director) + proteksi permission
     Route::get('ptk-queue/{stage?}', [PTKController::class, 'queue'])
         ->whereIn('stage', ['approver', 'director'])
-        ->name('ptk.queue');
+        ->name('ptk.queue')
+        ->middleware('permission:menu.queue');
 
-    // Recycle bin + restore + hapus permanen
-    Route::get('ptk-recycle', [PTKController::class, 'recycle'])->name('ptk.recycle');
+    // Recycle bin + restore + hapus permanen + proteksi permission
+    Route::get('ptk-recycle', [PTKController::class, 'recycle'])
+        ->name('ptk.recycle')
+        ->middleware('permission:menu.recycle');
+
     Route::post('ptk/{id}/restore', [PTKController::class, 'restore'])->name('ptk.restore');
     Route::delete('ptk/{id}/force', [PTKController::class, 'forceDelete'])->name('ptk.force');
 
@@ -43,10 +47,15 @@ Route::middleware('auth')->group(function () {
         ->middleware('throttle:uploads');
 
     // ======================
-    // Approval
+    // Approval + proteksi permission
     // ======================
-    Route::post('ptk/{ptk}/approve', [ApprovalController::class, 'approve'])->name('ptk.approve');
-    Route::post('ptk/{ptk}/reject',  [ApprovalController::class, 'reject'])->name('ptk.reject');
+    Route::post('ptk/{ptk}/approve', [ApprovalController::class, 'approve'])
+        ->name('ptk.approve')
+        ->middleware('permission:ptk.approve');
+
+    Route::post('ptk/{ptk}/reject',  [ApprovalController::class, 'reject'])
+        ->name('ptk.reject')
+        ->middleware('permission:ptk.reject');
 
     // ======================
     // Settings: Kategori & Subkategori
@@ -87,8 +96,10 @@ Route::middleware('auth')->group(function () {
         Route::post('range/excel', [ExportController::class, 'rangeExcel'])->name('range.excel');
         Route::post('range/pdf',   [ExportController::class, 'rangePdf'])->name('range.pdf');
 
-        // (Tetap) Audit
-        Route::get('/audits', [AuditController::class, 'index'])->name('audits.index');
+        // Audit (dengan proteksi permission)
+        Route::get('/audits', [AuditController::class, 'index'])
+            ->name('audits.index')
+            ->middleware('permission:menu.audit');
     });
 });
 

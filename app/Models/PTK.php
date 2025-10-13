@@ -14,16 +14,13 @@ class PTK extends Model implements AuditableContract
     use SoftDeletes, Auditable;
 
     /**
-     * Nama tabel (sesuaikan dengan migration).
+     * Nama tabel (sesuai migration).
      */
     protected $table = 'ptks';
 
     /**
      * Kolom yang boleh di-mass assign.
-     *
-     * Pastikan migration memiliki kolom: subcategory_id.
-     *
-     * @var array<int, string>
+     * (Tidak ada kolom attachments di sini.)
      */
     protected $fillable = [
         'number',
@@ -41,17 +38,15 @@ class PTK extends Model implements AuditableContract
     ];
 
     /**
-     * Cast atribut.
+     * Casting atribut.
      */
     protected $casts = [
-        'due_date'    => 'date',
+        'due_date'    => 'datetime',
         'approved_at' => 'datetime',
     ];
 
     /**
      * Kolom yang diikutkan dalam audit.
-     *
-     * @var array<int, string>
      */
     protected array $auditInclude = [
         'number',
@@ -67,6 +62,22 @@ class PTK extends Model implements AuditableContract
         'approver_id',
         'director_id',
     ];
+
+    // ========================
+    // Mutators / Guards
+    // ========================
+
+    /**
+     * Lindungi nomor agar immutable:
+     * jika 'number' sudah terisi, abaikan assignment berikutnya.
+     */
+    public function setNumberAttribute($val): void
+    {
+        if (!empty($this->attributes['number'])) {
+            return; // sudah ada → jangan timpa
+        }
+        $this->attributes['number'] = $val;
+    }
 
     // ========================
     // Relationships

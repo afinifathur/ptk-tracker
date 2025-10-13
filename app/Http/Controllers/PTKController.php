@@ -1,19 +1,23 @@
 <?php
+// app/Http/Controllers/PTKController.php
 
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use App\Models\{PTK, Department, Category, Attachment};
+use App\Models\{PTK, Department, Category};
 use Maatwebsite\Excel\Facades\Excel;
 use App\Imports\PTKImport;
 use App\Services\AttachmentService;
+use App\Support\DeptScope;
 
 class PTKController extends Controller
 {
-    /**
-     * List PTK + filter status & pencarian.
-     */
+    public function __construct()
+    {
+        $this->authorizeResource(PTK::class, 'ptk');
+    }
+
     public function index(Request $request)
     {
         $q = PTK::with([
@@ -22,6 +26,11 @@ class PTKController extends Controller
             'category:id,name',
             'subcategory:id,name',
         ])->latest();
+
+        $allowed = DeptScope::allowedDeptIds($request->user());
+        if (!empty($allowed)) {
+            $q->whereIn('department_id', $allowed);
+        }
 
         if ($request->filled('status')) {
             $q->where('status', $request->status);
@@ -40,9 +49,6 @@ class PTKController extends Controller
         return view('ptk.index', compact('ptk'));
     }
 
-    /**
-     * Form create.
-     */
     public function create()
     {
         return view('ptk.create', [
@@ -53,50 +59,43 @@ class PTKController extends Controller
     }
 
     /**
-     * Simpan PTK baru.
+     * STORE — buang attachments dari insert PTK,
+     * upload file diproses terpisah via AttachmentService.
      */
     public function store(Request $request)
     {
         $data = $request->validate([
-            'number'         => 'required|unique:ptks,number',
             'title'          => 'required|string|max:255',
-            'description'    => 'required|string',
+            'description'    => 'nullable|string',
             'category_id'    => 'required|exists:categories,id',
             'subcategory_id' => 'nullable|exists:subcategories,id',
             'department_id'  => 'required|exists:departments,id',
             'pic_user_id'    => 'required|exists:users,id',
-            'due_date'       => 'required|date',
+            'due_date'       => 'nullable|date',
+            'status'         => 'nullable|in:Not Started,In Progress,Completed',
             'attachments.*'  => 'file|mimes:jpg,jpeg,png,pdf|max:5120',
         ]);
 
-        $data['status'] = 'Not Started';
+        // Hapus key "attachments" agar tidak ikut create PTK
+        $ptk = PTK::create(collect($data)->except(['attachments'])->toArray());
 
-        $ptk = PTK::create($data);
-
-        // Handle attachments via service
+        // Proses upload (jika ada)
         if ($request->hasFile('attachments')) {
             $svc = app(AttachmentService::class);
             foreach ($request->file('attachments') as $file) {
-                $svc->handle($file, $ptk->id); // auto-skip jika tidak valid
+                $svc->handle($file, $ptk->id);
             }
         }
 
         return redirect()->route('ptk.show', $ptk)->with('ok', 'PTK dibuat.');
     }
 
-    /**
-     * Detail PTK.
-     */
     public function show(PTK $ptk)
     {
         $ptk->load(['attachments', 'pic', 'department', 'category', 'subcategory']);
-
         return view('ptk.show', compact('ptk'));
     }
 
-    /**
-     * Form edit.
-     */
     public function edit(PTK $ptk)
     {
         return view('ptk.edit', [
@@ -108,25 +107,26 @@ class PTKController extends Controller
     }
 
     /**
-     * Update PTK.
+     * UPDATE — buang attachments dari update data PTK,
+     * upload file tetap via AttachmentService.
      */
     public function update(Request $request, PTK $ptk)
     {
         $data = $request->validate([
             'title'          => 'required|string|max:255',
-            'description'    => 'required|string',
+            'description'    => 'nullable|string',
             'category_id'    => 'required|exists:categories,id',
             'subcategory_id' => 'nullable|exists:subcategories,id',
             'department_id'  => 'required|exists:departments,id',
             'pic_user_id'    => 'required|exists:users,id',
-            'due_date'       => 'required|date',
-            'status'         => 'required|in:Not Started,In Progress,Completed',
+            'due_date'       => 'nullable|date',
+            'status'         => 'nullable|in:Not Started,In Progress,Completed',
             'attachments.*'  => 'file|mimes:jpg,jpeg,png,pdf|max:5120',
         ]);
 
-        $ptk->update($data);
+        // Exclude attachments saat update
+        $ptk->update(collect($data)->except(['attachments'])->toArray());
 
-        // Handle attachments baru (opsional)
         if ($request->hasFile('attachments')) {
             $svc = app(AttachmentService::class);
             foreach ($request->file('attachments') as $file) {
@@ -134,39 +134,36 @@ class PTKController extends Controller
             }
         }
 
-        return redirect()->route('ptk.show', $ptk)->with('ok', 'PTK diperbarui.');
+        return back()->with('ok', 'PTK diperbarui.');
     }
 
-    /**
-     * Soft delete ke Recycle Bin.
-     */
     public function destroy(PTK $ptk)
     {
         $ptk->delete();
-
         return back()->with('ok', 'PTK dipindah ke Recycle Bin.');
     }
 
-    /**
-     * Board Kanban (Not Started, In Progress, Completed).
-     */
-    public function kanban()
+    public function kanban(Request $request)
     {
         $cols = ['Not Started', 'In Progress', 'Completed'];
 
-        $items = PTK::with(['pic:id,name','department:id,name'])
-            ->orderBy('updated_at', 'desc')
-            ->get()
-            ->groupBy('status');
+        $q = PTK::with(['pic:id,name','department:id,name'])
+            ->orderBy('updated_at', 'desc');
+
+        $allowed = DeptScope::allowedDeptIds($request->user());
+        if (!empty($allowed)) {
+            $q->whereIn('department_id', $allowed);
+        }
+
+        $items = $q->get()->groupBy('status');
 
         return view('ptk.kanban', compact('cols', 'items'));
     }
 
-    /**
-     * Update status cepat via AJAX.
-     */
     public function quickStatus(Request $request, PTK $ptk)
     {
+        $this->authorize('update', $ptk);
+
         $request->validate([
             'status' => 'required|in:Not Started,In Progress,Completed',
         ]);
@@ -176,12 +173,7 @@ class PTKController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    /**
-     * /ptk-queue             -> gabungan semua stage (default)
-     * /ptk-queue/approver    -> khusus menunggu approver
-     * /ptk-queue/director    -> khusus menunggu director
-     */
-    public function queue(?string $stage = null)
+    public function queue(Request $request, ?string $stage = null)
     {
         $q = PTK::with(['pic:id,name','department:id,name'])
             ->whereIn('status', ['Not Started', 'In Progress']);
@@ -189,8 +181,12 @@ class PTKController extends Controller
         if ($stage === 'approver') {
             $q->whereNull('approver_id');
         } elseif ($stage === 'director') {
-            $q->whereNotNull('approver_id')
-              ->whereNull('director_id');
+            $q->whereNotNull('approver_id')->whereNull('director_id');
+        }
+
+        $allowed = DeptScope::allowedDeptIds($request->user());
+        if (!empty($allowed)) {
+            $q->whereIn('department_id', $allowed);
         }
 
         $items = $q->latest()->paginate(20)->withQueryString();
@@ -198,38 +194,34 @@ class PTKController extends Controller
         return view('ptk.queue', compact('items', 'stage'));
     }
 
-    /**
-     * Recycle Bin.
-     */
-    public function recycle()
+    public function recycle(Request $request)
     {
-        $items = PTK::onlyTrashed()
-            ->latest('deleted_at')
-            ->paginate(20);
+        $q = PTK::onlyTrashed()->latest('deleted_at');
+
+        $allowed = DeptScope::allowedDeptIds($request->user());
+        if (!empty($allowed)) {
+            $q->whereIn('department_id', $allowed);
+        }
+
+        $items = $q->paginate(20);
 
         return view('ptk.recycle', compact('items'));
     }
 
-    /**
-     * Pulihkan dari Recycle Bin.
-     */
-    public function restore($id)
+    public function restore(Request $request, $id)
     {
         $ptk = PTK::withTrashed()->findOrFail($id);
+        $this->authorize('delete', $ptk);
         $ptk->restore();
 
         return back()->with('ok', 'PTK dipulihkan.');
     }
 
-    /**
-     * Hapus permanen (termasuk file lampiran di storage).
-     * NOTE: idealnya dibatasi role (director/superadmin).
-     */
-    public function forceDelete($id)
+    public function forceDelete(Request $request, $id)
     {
         $ptk = PTK::withTrashed()->with('attachments')->findOrFail($id);
+        $this->authorize('delete', $ptk);
 
-        // Hapus file lampiran fisik + record attachment
         foreach ($ptk->attachments as $a) {
             if ($a->path) {
                 Storage::disk('public')->delete($a->path);
@@ -242,9 +234,6 @@ class PTKController extends Controller
         return back()->with('ok', 'PTK dihapus permanen.');
     }
 
-    // =================
-    // Import (Excel/CSV)
-    // =================
     public function import(Request $request)
     {
         $request->validate([
