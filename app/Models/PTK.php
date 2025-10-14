@@ -35,6 +35,7 @@ class PTK extends Model implements AuditableContract
         'approved_at',
         'approver_id',
         'director_id',
+        'created_by', // ✅ tambahkan ini agar bisa diisi otomatis
     ];
 
     /**
@@ -61,6 +62,7 @@ class PTK extends Model implements AuditableContract
         'approved_at',
         'approver_id',
         'director_id',
+        'created_by', // ✅ ikut diaudit
     ];
 
     // ========================
@@ -111,6 +113,14 @@ class PTK extends Model implements AuditableContract
     public function director(): BelongsTo
     {
         return $this->belongsTo(User::class, 'director_id');
+    }
+
+    /**
+     * Relasi ke user pembuat (creator)
+     */
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     /**

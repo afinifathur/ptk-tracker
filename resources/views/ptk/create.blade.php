@@ -33,21 +33,41 @@
       @error('subcategory_id') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
-    <label for="department_id">Departemen
-      <select id="department_id" name="department_id" class="border p-2 rounded w-full" required>
-        <option value="">-- pilih --</option>
-        @foreach($departments as $d)
-          <option value="{{ $d->id }}" @selected(old('department_id') == $d->id)>{{ $d->name }}</option>
-        @endforeach
-      </select>
-      @error('department_id') <small class="text-red-600">{{ $message }}</small> @enderror
-    </label>
+    {{-- Departemen: hidden utk admin dept, dropdown utk role lain --}}
+    @php
+      $u = auth()->user();
+      $isDeptAdmin = $u->hasAnyRole('admin_qc','admin_hr','admin_k3');
+      $deptOldOrUser = old('department_id', $u->department_id);
+    @endphp
+
+    @if($isDeptAdmin)
+      {{-- Admin QC/HR/K3: paksa departemen = departemen user --}}
+      <div class="md:col-span-2">
+        <label class="block text-sm text-gray-500">Departemen</label>
+        <div class="border rounded p-2 bg-gray-50">
+          <strong>{{ $u->department->name ?? '-' }}</strong>
+        </div>
+        <input type="hidden" name="department_id" value="{{ $deptOldOrUser }}">
+        @error('department_id') <small class="text-red-600">{{ $message }}</small> @enderror
+      </div>
+    @else
+      {{-- Manager/Director/Auditor: boleh pilih departemen dari list yang sudah difilter di controller --}}
+      <label for="department_id">Departemen
+        <select id="department_id" name="department_id" class="border p-2 rounded w-full" required>
+          <option value="">-- pilih --</option>
+          @foreach($departments as $d)
+            <option value="{{ $d->id }}" @selected(old('department_id') == $d->id)>{{ $d->name }}</option>
+          @endforeach
+        </select>
+        @error('department_id') <small class="text-red-600">{{ $message }}</small> @enderror
+      </label>
+    @endif
 
     <label for="pic_user_id">PIC
       <select id="pic_user_id" name="pic_user_id" class="border p-2 rounded w-full" required>
         <option value="">-- pilih --</option>
-        @foreach($users as $u)
-          <option value="{{ $u->id }}" @selected(old('pic_user_id') == $u->id)>{{ $u->name }}</option>
+        @foreach($users as $uopt)
+          <option value="{{ $uopt->id }}" @selected(old('pic_user_id') == $uopt->id)>{{ $uopt->name }}</option>
         @endforeach
       </select>
       @error('pic_user_id') <small class="text-red-600">{{ $message }}</small> @enderror
@@ -108,7 +128,7 @@
       }
     }
 
-    document.querySelector('select[name="category_id"]').addEventListener('change', function(){
+    document.getElementById('category_id').addEventListener('change', function(){
       loadSubcats(this.value);
     });
 
