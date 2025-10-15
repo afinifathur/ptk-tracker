@@ -1,3 +1,4 @@
+{{-- resources/views/ptk/edit.blade.php --}}
 <x-layouts.app>
   <h2 class="text-xl font-semibold mb-4">Edit PTK {{ $ptk->number }}</h2>
 
@@ -62,10 +63,33 @@
       @error('due_date') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
+    {{-- Deskripsi umum --}}
     <label for="description" class="md:col-span-2">Deskripsi
       <textarea id="description" name="description" rows="6" class="border p-2 rounded w-full" required>{{ old('description', $ptk->description) }}</textarea>
       @error('description') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
+
+    {{-- 🔽 4 bagian tambahan --}}
+    <label class="md:col-span-2">Deskripsi Ketidaksesuaian
+      <textarea name="description_nc" rows="5" class="border p-2 rounded w-full">{{ old('description_nc', $ptk->description_nc ?? '') }}</textarea>
+      @error('description_nc') <small class="text-red-600">{{ $message }}</small> @enderror
+    </label>
+
+    <label class="md:col-span-2">Evaluasi Masalah
+      <textarea name="evaluation" rows="5" class="border p-2 rounded w-full">{{ old('evaluation', $ptk->evaluation ?? '') }}</textarea>
+      @error('evaluation') <small class="text-red-600">{{ $message }}</small> @enderror
+    </label>
+
+    <label class="md:col-span-2">3a. Koreksi (perbaikan masalah)
+      <textarea name="correction_action" rows="5" class="border p-2 rounded w-full">{{ old('correction_action', $ptk->correction_action ?? '') }}</textarea>
+      @error('correction_action') <small class="text-red-600">{{ $message }}</small> @enderror
+    </label>
+
+    <label class="md:col-span-2">3b. Tindakan Korektif (akar masalah)
+      <textarea name="corrective_action" rows="5" class="border p-2 rounded w-full">{{ old('corrective_action', $ptk->corrective_action ?? '') }}</textarea>
+      @error('corrective_action') <small class="text-red-600">{{ $message }}</small> @enderror
+    </label>
+    {{-- 🔼 end 4 bagian --}}
 
     <label for="attachments" class="md:col-span-2">Lampiran (tambah)
       <input id="attachments" type="file" name="attachments[]" multiple accept=".jpg,.jpeg,.png,.pdf" class="border p-2 rounded w-full">

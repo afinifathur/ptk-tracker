@@ -19,13 +19,16 @@ class PTK extends Model implements AuditableContract
     protected $table = 'ptks';
 
     /**
-     * Kolom yang boleh di-mass assign.
-     * (Tidak ada kolom attachments di sini.)
+     * Kolom yang boleh diisi mass assignment.
      */
     protected $fillable = [
         'number',
         'title',
         'description',
+        'description_nc',
+        'evaluation',
+        'correction_action',
+        'corrective_action',
         'category_id',
         'subcategory_id',
         'department_id',
@@ -35,11 +38,11 @@ class PTK extends Model implements AuditableContract
         'approved_at',
         'approver_id',
         'director_id',
-        'created_by', // ✅ tambahkan ini agar bisa diisi otomatis
+        'created_by',
     ];
 
     /**
-     * Casting atribut.
+     * Casting atribut tanggal.
      */
     protected $casts = [
         'due_date'    => 'datetime',
@@ -53,6 +56,10 @@ class PTK extends Model implements AuditableContract
         'number',
         'title',
         'description',
+        'description_nc',
+        'evaluation',
+        'correction_action',
+        'corrective_action',
         'category_id',
         'subcategory_id',
         'department_id',
@@ -62,7 +69,7 @@ class PTK extends Model implements AuditableContract
         'approved_at',
         'approver_id',
         'director_id',
-        'created_by', // ✅ ikut diaudit
+        'created_by',
     ];
 
     // ========================
@@ -70,15 +77,15 @@ class PTK extends Model implements AuditableContract
     // ========================
 
     /**
-     * Lindungi nomor agar immutable:
-     * jika 'number' sudah terisi, abaikan assignment berikutnya.
+     * Lindungi nomor agar immutable (tidak bisa diubah setelah diisi).
      */
-    public function setNumberAttribute($val): void
+    public function setNumberAttribute($value): void
     {
         if (!empty($this->attributes['number'])) {
-            return; // sudah ada → jangan timpa
+            return; // sudah ada, jangan ditimpa
         }
-        $this->attributes['number'] = $val;
+
+        $this->attributes['number'] = $value;
     }
 
     // ========================
@@ -124,7 +131,7 @@ class PTK extends Model implements AuditableContract
     }
 
     /**
-     * Pastikan foreign key di tabel attachments = 'ptk_id'.
+     * Relasi ke attachments (foreign key: ptk_id)
      */
     public function attachments(): HasMany
     {

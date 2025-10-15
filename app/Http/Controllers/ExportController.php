@@ -2,17 +2,19 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{PTK, Department, Category, Subcategory};
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\{PTKExport, RangeExport};
+use App\Models\{PTK, Department, Category, Subcategory};
+use App\Support\DeptScope;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Maatwebsite\Excel\Facades\Excel;
 use Barryvdh\DomPDF\Facade\Pdf;
-use App\Support\DeptScope; // <— tambahkan
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class ExportController extends Controller
 {
-    /** Helper: terapkan scope department yang diizinkan ke query builder */
+    /** Terapkan DeptScope ke query builder */
     private function applyDeptScope(Request $request, $query)
     {
         $allowed = DeptScope::allowedDeptIds($request->user());
@@ -22,207 +24,194 @@ class ExportController extends Controller
         return $query;
     }
 
-    /**
-     * Export seluruh PTK dalam Excel (filter diteruskan ke PTKExport).
-     * Pastikan PTKExport menerapkan DeptScope juga (lihat catatan di bawah).
-     */
+    /** Export seluruh PTK ke Excel */
     public function excel(Request $request)
     {
-        // Disarankan: modifikasi PTKExport agar menerima user/allowed dept
         $allowed = DeptScope::allowedDeptIds($request->user());
         return Excel::download(new PTKExport($request, $allowed), 'ptk.xlsx');
     }
 
-    /**
-     * Export satu PTK ke PDF.
-     */
+    /** Export satu PTK ke PDF */
     public function pdf(Request $request, PTK $ptk)
     {
-        // Pastikan user berhak melihat PTK ini (via policy) + cek dept scope
         $this->authorize('view', $ptk);
 
+        // DeptScope check
         $allowed = DeptScope::allowedDeptIds($request->user());
         if (!empty($allowed) && !in_array($ptk->department_id, $allowed, true)) {
             abort(403);
         }
 
-        $ptk->load(['attachments', 'pic', 'department', 'category', 'subcategory']);
+        // Eager load relasi
+        $ptk->load([
+            'attachments', 'pic', 'department', 'category', 'subcategory',
+            'creator', 'approver', 'director',
+        ]);
 
+        // Hash dokumen
         $docHash = hash('sha256', json_encode([
-            'id'         => $ptk->id,
-            'number'     => $ptk->number,
-            'status'     => $ptk->status,
-            'due'        => $ptk->due_date?->format('Y-m-d'),
-            'approved_at'=> $ptk->approved_at?->format('c'),
-            'updated_at' => $ptk->updated_at?->format('c'),
+            'id'          => $ptk->id,
+            'number'      => $ptk->number,
+            'status'      => $ptk->status,
+            'due'         => $ptk->due_date?->format('Y-m-d'),
+            'approved_at' => $ptk->approved_at?->format('c'),
+            'updated_at'  => $ptk->updated_at?->format('c'),
         ]));
 
-        $pdf = Pdf::loadView('exports.ptk_pdf', compact('ptk', 'docHash'));
+        // URL verifikasi + QR code
+        $verifyUrl = route('verify.show', ['ptk' => $ptk->id, 'hash' => $docHash]);
+        try {
+            $png = QrCode::format('png')->size(120)->generate($verifyUrl);
+            $qrBase64 = 'data:image/png;base64,' . base64_encode($png);
+        } catch (\Throwable $e) {
+            $qrBase64 = null;
+        }
 
-        return $pdf->download('ptk-' . $ptk->number . '.pdf');
+        // Logo & tanda tangan
+        $companyLogoBase64 = $this->b64(public_path('brand/logo.png'));
+        $signAdmin    = $this->b64(public_path('brand/signatures/admin.png'));
+        $signApprover = $this->b64(public_path('brand/signatures/approver.png'));
+        $signDirector = $this->b64(public_path('brand/signatures/director.png'));
+
+        // Embed lampiran gambar (maks 6)
+        $embeds = [];
+        foreach ($ptk->attachments->take(6) as $att) {
+            $mime = strtolower($att->mime ?? '');
+            if (str_starts_with($mime, 'image/')) {
+                $full = Storage::disk('public')->path($att->path);
+                if (is_file($full)) {
+                    $embeds[] = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($full));
+                }
+            }
+        }
+
+        // Render PDF
+        $pdf = Pdf::loadView('exports.ptk_pdf', [
+            'ptk'               => $ptk,
+            'docHash'           => $docHash,
+            'qrBase64'          => $qrBase64,
+            'verifyUrl'         => $verifyUrl,
+            'companyLogoBase64' => $companyLogoBase64,
+            'signAdmin'         => $signAdmin,
+            'signApprover'      => $ptk->approved_at ? $signApprover : null,
+            'signDirector'      => $signDirector,
+            'embeds'            => $embeds,
+        ])->setPaper('a4', 'portrait');
+
+        $pdf->set_option('isRemoteEnabled', true);
+        $pdf->set_option('defaultFont', 'DejaVu Sans');
+
+        // Nama file aman
+        $base = $ptk->number ?: Str::slug($ptk->title ?: '') ?: 'laporan-ptk';
+        $safe = preg_replace('/[\\\\\/]+/', '-', $base);
+        $fname = "ptk-{$safe}.pdf";
+
+        return $pdf->download($fname);
     }
 
-    /**
-     * Form laporan rentang tanggal + filter tambahan.
-     * Batasi daftar department sesuai DeptScope.
-     */
-    public function rangeForm(Request $request)
+    /** Laporan Periode (form) */
+    public function rangeForm()
     {
-        $categories = Category::orderBy('name')->get(['id', 'name']);
-
-        $deptQ = Department::orderBy('name')->select(['id', 'name']);
-        $allowed = DeptScope::allowedDeptIds($request->user());
-        if (!empty($allowed)) {
-            $deptQ->whereIn('id', $allowed);
-        }
-        $departments = $deptQ->get();
-
+        $categories    = Category::orderBy('name')->get(['id', 'name']);
+        $departments   = Department::orderBy('name')->get(['id', 'name']);
         $subcategories = Subcategory::orderBy('name')->get(['id', 'name', 'category_id']);
 
         return view('exports.range_form', compact('categories', 'departments', 'subcategories'));
     }
 
-    /**
-     * Laporan HTML untuk rentang tanggal dengan filter + rekap Top 3.
-     * Semua query dibatasi DeptScope.
-     */
-    public function rangeReport(Request $request)
+    /** Laporan HTML untuk rentang tanggal — kirim lookup lists + $items + Top 3 */
+    public function rangeReport(Request $r)
     {
-        $data = $request->validate([
-            'start'          => ['required', 'date'],
-            'end'            => ['required', 'date', 'after_or_equal:start'],
-            'category_id'    => ['nullable', 'integer', 'exists:categories,id'],
-            'subcategory_id' => ['nullable', 'integer', 'exists:subcategories,id'],
-            'department_id'  => ['nullable', 'integer', 'exists:departments,id'],
-            'status'         => ['nullable', 'in:Not Started,In Progress,Completed'],
-        ]);
+        $start = $r->input('start');
+        $end   = $r->input('end');
 
-        // Data utama
-        $q = PTK::with(['pic', 'department', 'category', 'subcategory'])
-            ->whereBetween('created_at', [$data['start'], $data['end']]);
+        // Base query (lengkapi relasi untuk mapping nama)
+        $q = PTK::with(['department', 'category', 'subcategory', 'pic']);
 
-        $this->applyDeptScope($request, $q);
+        // Filter tanggal
+        if ($start) {
+            $q->whereDate('created_at', '>=', $start);
+        }
+        if ($end) {
+            $q->whereDate('created_at', '<=', $end);
+        }
 
-        if (!empty($data['category_id']))    $q->where('category_id',    $data['category_id']);
-        if (!empty($data['subcategory_id'])) $q->where('subcategory_id', $data['subcategory_id']);
-        if (!empty($data['department_id']))  $q->where('department_id',  $data['department_id']);
-        if (!empty($data['status']))         $q->where('status',         $data['status']);
+        // Filter lain (opsional)
+        if ($r->filled('status'))        $q->where('status', $r->status);
+        if ($r->filled('department_id')) $q->where('department_id', $r->department_id);
+        if ($r->filled('category_id'))   $q->where('category_id', $r->category_id);
+        if ($r->filled('subcategory_id'))$q->where('subcategory_id', $r->subcategory_id);
 
-        $items = $q->get();
+        // Scope per user
+        $allowed = DeptScope::allowedDeptIds(auth()->user());
+        if (!empty($allowed)) {
+            $q->whereIn('department_id', $allowed);
+        }
 
-        // Rekap Top 3 Category
-        $byCategory = PTK::select('category_id', DB::raw('COUNT(*) as total'))
-            ->whereBetween('created_at', [$data['start'], $data['end']]);
-        $this->applyDeptScope($request, $byCategory);
-        $byCategory
-            ->when(!empty($data['department_id']),  fn ($w) => $w->where('department_id',  $data['department_id']))
-            ->when(!empty($data['status']),         fn ($w) => $w->where('status',         $data['status']))
-            ->when(!empty($data['subcategory_id']), fn ($w) => $w->where('subcategory_id', $data['subcategory_id']))
+        // Data utama (urutkan by created_at untuk tabel)
+        $ptks  = $q->orderBy('created_at')->get();
+        $items = $ptks; // alias untuk kompatibilitas view lama
+
+        // ===== Top 3 (reset order agar lolos ONLY_FULL_GROUP_BY) =====
+        $qBase = clone $q;
+
+        $topCategories = (clone $qBase)
+            ->reorder() // hapus orderBy('created_at') yang diwariskan
+            ->selectRaw('category_id, COUNT(*) as total')
             ->groupBy('category_id')
             ->orderByDesc('total')
-            ->limit(3);
-        $byCategory = $byCategory->get();
+            ->limit(3)
+            ->get()
+            ->map(fn($r) => [
+                'name'  => optional($r->category)->name ?? '-',
+                'total' => $r->total,
+            ]);
 
-        // Rekap Top 3 Department
-        $byDepartment = PTK::select('department_id', DB::raw('COUNT(*) as total'))
-            ->whereBetween('created_at', [$data['start'], $data['end']]);
-        $this->applyDeptScope($request, $byDepartment);
-        $byDepartment
-            ->when(!empty($data['category_id']),    fn ($w) => $w->where('category_id',    $data['category_id']))
-            ->when(!empty($data['subcategory_id']), fn ($w) => $w->where('subcategory_id', $data['subcategory_id']))
-            ->when(!empty($data['status']),         fn ($w) => $w->where('status',         $data['status']))
+        $topDepartments = (clone $qBase)
+            ->reorder()
+            ->selectRaw('department_id, COUNT(*) as total')
             ->groupBy('department_id')
             ->orderByDesc('total')
-            ->limit(3);
-        $byDepartment = $byDepartment->get();
+            ->limit(3)
+            ->get()
+            ->map(fn($r) => [
+                'name'  => optional($r->department)->name ?? '-',
+                'total' => $r->total,
+            ]);
 
-        // Rekap Top 3 Subcategory
-        $bySubcategory = PTK::select('subcategory_id', DB::raw('COUNT(*) as total'))
-            ->whereBetween('created_at', [$data['start'], $data['end']]);
-        $this->applyDeptScope($request, $bySubcategory);
-        $bySubcategory
-            ->when(!empty($data['category_id']),   fn ($w) => $w->where('category_id',   $data['category_id']))
-            ->when(!empty($data['department_id']), fn ($w) => $w->where('department_id', $data['department_id']))
-            ->when(!empty($data['status']),        fn ($w) => $w->where('status',        $data['status']))
+        $topSubcategories = (clone $qBase)
+            ->reorder()
             ->whereNotNull('subcategory_id')
+            ->selectRaw('subcategory_id, COUNT(*) as total')
             ->groupBy('subcategory_id')
             ->orderByDesc('total')
-            ->limit(3);
-        $bySubcategory = $bySubcategory->get();
+            ->limit(3)
+            ->get()
+            ->map(fn($r) => [
+                'name'  => optional($r->subcategory)->name ?? '-',
+                'total' => $r->total,
+            ]);
 
-        // Mapping id -> nama
-        $catNames  = Category::pluck('name', 'id');
-        $deptNames = Department::pluck('name', 'id');
-        $subNames  = Subcategory::pluck('name', 'id');
-
-        $topCategories = $byCategory->map(fn ($r) => [
-            'name'  => $catNames[$r->category_id] ?? '-',
-            'total' => $r->total,
-        ])->values();
-
-        $topDepartments = $byDepartment->map(fn ($r) => [
-            'name'  => $deptNames[$r->department_id] ?? '-',
-            'total' => $r->total,
-        ])->values();
-
-        $topSubcategories = $bySubcategory->map(fn ($r) => [
-            'name'  => $subNames[$r->subcategory_id] ?? '-',
-            'total' => $r->total,
-        ])->values();
-
-        // KPI sederhana: SLA & Overdue
-        $base = PTK::whereBetween('created_at', [$data['start'], $data['end']]);
-        $this->applyDeptScope($request, $base);
-        $base
-            ->when(!empty($data['category_id']),    fn ($w) => $w->where('category_id',    $data['category_id']))
-            ->when(!empty($data['subcategory_id']), fn ($w) => $w->where('subcategory_id', $data['subcategory_id']))
-            ->when(!empty($data['department_id']),  fn ($w) => $w->where('department_id',  $data['department_id']))
-            ->when(!empty($data['status']),         fn ($w) => $w->where('status',         $data['status']));
-
-        $nCompleted = (clone $base)->where('status', 'Completed')->count();
-        $nSlaOk     = (clone $base)->where('status', 'Completed')
-            ->whereColumn('approved_at', '<=', 'due_date')
-            ->count();
-
-        $sla = $nCompleted ? round($nSlaOk / max(1, $nCompleted) * 100, 1) : 0;
-
-        $overdue = (clone $base)
-            ->whereIn('status', ['Not Started', 'In Progress'])
-            ->whereDate('due_date', '<', now()->toDateString())
-            ->count();
-
-        // Data referensi untuk filter di view (dropdown) — batasi departments juga
-        $categories = Category::orderBy('name')->get(['id', 'name']);
-
-        $deptQ = Department::orderBy('name')->select(['id','name']);
-        $allowed = DeptScope::allowedDeptIds($request->user());
-        if (!empty($allowed)) {
-            $deptQ->whereIn('id', $allowed);
-        }
-        $departments = $deptQ->get();
-
-        $subcategories = Subcategory::when(!empty($data['category_id']), fn ($q) => $q->where('category_id', $data['category_id']))
-            ->orderBy('name')
-            ->get(['id', 'name', 'category_id']);
+        // Lookup lists untuk view
+        $categories    = Category::orderBy('name')->get(['id', 'name']);
+        $departments   = Department::orderBy('name')->get(['id', 'name']);
+        $subcategories = Subcategory::orderBy('name')->get(['id', 'name', 'category_id']);
 
         return view('exports.range_report', compact(
+            'ptks',
             'items',
-            'data',
-            'topCategories',
-            'topDepartments',
-            'topSubcategories',
-            'sla',
-            'overdue',
+            'start',
+            'end',
             'categories',
             'departments',
-            'subcategories'
+            'subcategories',
+            'topCategories',
+            'topDepartments',
+            'topSubcategories'
         ));
     }
 
-    /**
-     * Export Excel laporan range + filter.
-     * Disarankan menambahkan $allowed ke RangeExport dan terapkan di query export.
-     */
+    /** Export Excel laporan range */
     public function rangeExcel(Request $request)
     {
         $data = $request->validate([
@@ -244,15 +233,13 @@ class ExportController extends Controller
                 $data['department_id']  ?? null,
                 $data['status']         ?? null,
                 $data['subcategory_id'] ?? null,
-                $allowed                ?? [] // <— tambahkan argumen opsional di RangeExport
+                $allowed                ?? []
             ),
             'ptk-range.xlsx'
         );
     }
 
-    /**
-     * Export PDF laporan range + filter (dibatasi DeptScope).
-     */
+    /** Export PDF laporan range */
     public function rangePdf(Request $request)
     {
         $data = $request->validate([
@@ -266,6 +253,7 @@ class ExportController extends Controller
 
         $q = PTK::with(['pic', 'department', 'category', 'subcategory'])
             ->whereBetween('created_at', [$data['start'], $data['end']]);
+
         $this->applyDeptScope($request, $q);
 
         if (!empty($data['category_id']))    $q->where('category_id',    $data['category_id']);
@@ -281,8 +269,30 @@ class ExportController extends Controller
             'ts'    => now()->format('c'),
         ]));
 
-        $pdf = Pdf::loadView('exports.range_pdf', compact('items', 'data', 'docHash'));
+        $pdf = Pdf::loadView('exports.range_pdf', compact('items', 'data', 'docHash'))
+            ->setPaper('a4', 'portrait');
+
+        $pdf->set_option('isRemoteEnabled', true);
+        $pdf->set_option('defaultFont', 'DejaVu Sans');
 
         return $pdf->download('ptk-range-' . $data['start'] . '_to_' . $data['end'] . '.pdf');
+    }
+
+    /** Helper: baca file & kembalikan base64 */
+    private function b64(?string $path): ?string
+    {
+        if (!$path || !is_file($path)) {
+            return null;
+        }
+
+        $ext  = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        $mime = match ($ext) {
+            'png'         => 'image/png',
+            'jpg', 'jpeg' => 'image/jpeg',
+            'gif'         => 'image/gif',
+            default       => 'application/octet-stream',
+        };
+
+        return 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($path));
     }
 }

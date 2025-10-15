@@ -17,6 +17,7 @@ class Attachment extends Model implements AuditableContract
     protected $fillable = [
         'ptk_id',
         'original_name',
+        'caption',
         'path',
         'mime',
         'size',
@@ -29,6 +30,7 @@ class Attachment extends Model implements AuditableContract
     protected array $auditInclude = [
         'ptk_id',
         'original_name',
+        'caption',
         'path',
         'mime',
         'size',

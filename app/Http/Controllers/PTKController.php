@@ -24,6 +24,9 @@ class PTKController extends Controller
         $this->authorizeResource(PTK::class, 'ptk');
     }
 
+    /**
+     * INDEX — daftar PTK (kirim $ptks ke view)
+     */
     public function index(Request $request)
     {
         $q = PTK::with([
@@ -31,34 +34,39 @@ class PTKController extends Controller
             'department:id,name',
             'category:id,name',
             'subcategory:id,name',
-            'creator:id,name', // tampilkan pembuat
+            'creator:id,name',
         ])->latest();
 
+        // DeptScope
         $allowed = DeptScope::allowedDeptIds($request->user());
         if (!empty($allowed)) {
             $q->whereIn('department_id', $allowed);
         }
 
+        // Filter status
         if ($request->filled('status')) {
             $q->where('status', $request->status);
         }
 
+        // Pencarian judul / nomor
         if ($request->filled('q')) {
-            $term = $request->q;
+            $term = trim($request->q);
             $q->where(function ($w) use ($term) {
-                $w->where('title', 'like', '%'.$term.'%')
-                  ->orWhere('number', 'like', '%'.$term.'%');
+                $w->where('title', 'like', "%{$term}%")
+                  ->orWhere('number', 'like', "%{$term}%");
             });
         }
 
-        $ptk = $q->paginate(20)->withQueryString();
+        /** @var \Illuminate\Contracts\Pagination\LengthAwarePaginator $ptks */
+        $ptks = $q->paginate(20)->withQueryString();
 
-        return view('ptk.index', compact('ptk'));
+        return view('ptk.index', compact('ptks')); // <-- pakai $ptks
     }
 
     public function create(Request $request)
     {
         $departments = $this->departmentsFor($request);
+
         return view('ptk.create', [
             'departments' => $departments,
             'categories'  => Category::all(),
@@ -67,7 +75,7 @@ class PTKController extends Controller
     }
 
     /**
-     * STORE — attachment diproses terpisah via AttachmentService.
+     * STORE — attachment diproses via AttachmentService.
      * Memaksa admin dept ke department_id miliknya.
      */
     public function store(Request $request)
@@ -75,33 +83,37 @@ class PTKController extends Controller
         $allowed = DeptScope::allowedDeptIds($request->user());
 
         $rules = [
-            'title'          => 'required|string|max:255',
-            'description'    => 'nullable|string',
-            'category_id'    => 'required|exists:categories,id',
-            'subcategory_id' => 'nullable|exists:subcategories,id',
-            'department_id'  => ['required', 'exists:departments,id'],
-            'pic_user_id'    => 'required|exists:users,id',
-            'due_date'       => 'nullable|date',
-            'status'         => 'nullable|in:Not Started,In Progress,Completed',
-            'attachments.*'  => 'file|mimes:jpg,jpeg,png,pdf|max:5120',
+            'title'             => 'required|string|max:255',
+            'description'       => 'nullable|string',
+            'description_nc'    => 'nullable|string',
+            'evaluation'        => 'nullable|string',
+            'correction_action' => 'nullable|string',
+            'corrective_action' => 'nullable|string',
+            'category_id'       => 'required|exists:categories,id',
+            'subcategory_id'    => 'nullable|exists:subcategories,id',
+            'department_id'     => ['required', 'exists:departments,id'],
+            'pic_user_id'       => 'required|exists:users,id',
+            'due_date'          => 'nullable|date',
+            'status'            => 'nullable|in:Not Started,In Progress,Completed',
+            'attachments.*'     => 'file|mimes:jpg,jpeg,png,pdf|max:5120',
         ];
 
-        // jika user punya batasan dept, wajib in-scope
+        // batasi department sesuai DeptScope
         if (!empty($allowed)) {
             $rules['department_id'][] = Rule::in($allowed);
         }
 
         $data = $request->validate($rules);
 
-        // Paksa admin dept hanya ke departemen dirinya
+        // Paksa admin dept hanya ke departemennya
         if ($request->user()->hasAnyRole($this->deptAdminRoles)) {
             $data['department_id'] = $request->user()->department_id;
         }
 
-        // set pembuat PTK dari user yang login
+        // set pembuat PTK
         $data['created_by'] = auth()->id();
 
-        // Buang attachments dari mass assignment
+        // simpan tanpa attachments
         $ptk = PTK::create(collect($data)->except(['attachments'])->toArray());
 
         // Proses upload (jika ada)
@@ -142,15 +154,19 @@ class PTKController extends Controller
         $allowed = DeptScope::allowedDeptIds($request->user());
 
         $rules = [
-            'title'          => 'required|string|max:255',
-            'description'    => 'nullable|string',
-            'category_id'    => 'required|exists:categories,id',
-            'subcategory_id' => 'nullable|exists:subcategories,id',
-            'department_id'  => ['required', 'exists:departments,id'],
-            'pic_user_id'    => 'required|exists:users,id',
-            'due_date'       => 'nullable|date',
-            'status'         => 'nullable|in:Not Started,In Progress,Completed',
-            'attachments.*'  => 'file|mimes:jpg,jpeg,png,pdf|max:5120',
+            'title'             => 'required|string|max:255',
+            'description'       => 'nullable|string',
+            'description_nc'    => 'nullable|string',
+            'evaluation'        => 'nullable|string',
+            'correction_action' => 'nullable|string',
+            'corrective_action' => 'nullable|string',
+            'category_id'       => 'required|exists:categories,id',
+            'subcategory_id'    => 'nullable|exists:subcategories,id',
+            'department_id'     => ['required', 'exists:departments,id'],
+            'pic_user_id'       => 'required|exists:users,id',
+            'due_date'          => 'nullable|date',
+            'status'            => 'nullable|in:Not Started,In Progress,Completed',
+            'attachments.*'     => 'file|mimes:jpg,jpeg,png,pdf|max:5120',
         ];
 
         if (!empty($allowed)) {
@@ -214,11 +230,6 @@ class PTKController extends Controller
 
     /**
      * QUEUE — antrian persetujuan
-     * Hanya tampilkan PTK yang:
-     * - belum Completed
-     * - belum memiliki approver
-     * - berada dalam DeptScope user (jika ada)
-     * - untuk kabag/manager: hanya PTK yang dibuat admin di bawahnya
      */
     public function queue(Request $request)
     {
@@ -228,7 +239,7 @@ class PTKController extends Controller
             ->where('status', '!=', 'Completed')
             ->whereNull('approver_id');
 
-        // Dept scope filter (tetap dipakai)
+        // Dept scope filter
         $allowed = DeptScope::allowedDeptIds($user);
         if (!empty($allowed)) {
             $q->whereIn('department_id', $allowed);
@@ -236,10 +247,8 @@ class PTKController extends Controller
 
         // Filter tambahan berdasarkan role pembuat (creator)
         if ($user->hasRole('kabag_qc')) {
-            // hanya PTK yang dibuat admin QC
             $q->whereHas('creator', fn ($c) => $c->role('admin_qc'));
         } elseif ($user->hasRole('manager_hr')) {
-            // hanya PTK dari admin HR & admin K3
             $q->whereHas('creator', function ($c) {
                 $c->whereHas('roles', function ($r) {
                     $r->whereIn('name', ['admin_hr', 'admin_k3']);
@@ -304,7 +313,7 @@ class PTKController extends Controller
     }
 
     /**
-     * Helper: mengambil daftar departemen sesuai DeptScope user
+     * Helper: daftar departemen sesuai DeptScope user
      */
     private function departmentsFor(Request $request)
     {

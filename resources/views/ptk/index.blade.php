@@ -36,18 +36,28 @@
         <th>Judul</th>
         <th>PIC</th>
         <th>Departemen</th>
-        <th>Kategori</th> {{-- kolom baru --}}
+        <th>Kategori</th>
         <th>Status</th>
         <th>Due</th>
         <th>Aksi</th>
       </tr>
     </thead>
     <tbody>
-      @foreach($ptk as $p)
+      @forelse($ptks as $p)
         <tr>
-          <td><a class="underline" href="{{ route('ptk.show',$p) }}">{{ $p->number }}</a></td>
-          <td>{{ $p->created_at->format('Y-m-d') }}</td>
-          <td class="truncate max-w-[280px]">{{ $p->title }}</td>
+          {{-- Nomor (tanpa link) --}}
+          <td>{{ $p->number ?? '—' }}</td>
+
+          {{-- Tanggal (nowrap) --}}
+          <td class="whitespace-nowrap">{{ optional($p->created_at)->format('Y-m-d') }}</td>
+
+          {{-- Judul (link ke detail) --}}
+          <td class="truncate max-w-[280px]">
+            <a href="{{ route('ptk.show', $p) }}" class="underline">
+              {{ $p->title }}
+            </a>
+          </td>
+
           <td>{{ $p->pic->name ?? '-' }}</td>
           <td>{{ $p->department->name ?? '-' }}</td>
 
@@ -63,17 +73,24 @@
             @php $s = $p->status; @endphp
             <x-ui.stat-badge :status="$s" />
           </td>
-          <td>{{ optional($p->due_date)->format('Y-m-d') }}</td>
+
+          {{-- Due (nowrap) --}}
+          <td class="whitespace-nowrap">{{ optional($p->due_date)->format('Y-m-d') }}</td>
+
           <td class="space-x-2">
-            <a href="{{ route('ptk.edit',$p) }}" class="text-blue-600 underline">Edit</a>
-            <a href="{{ route('exports.pdf',$p) }}" class="text-gray-700 underline">PDF</a>
+            <a href="{{ route('ptk.edit', $p) }}" class="text-blue-600 underline">Edit</a>
+            <a href="{{ route('exports.pdf', $p) }}" class="text-gray-700 underline">PDF</a>
           </td>
         </tr>
-      @endforeach
+      @empty
+        <tr>
+          <td colspan="9" class="text-center text-gray-500 py-4">Belum ada data PTK.</td>
+        </tr>
+      @endforelse
     </tbody>
   </table>
 
-  <div class="mt-4">{{ $ptk->links() }}</div>
+  <div class="mt-4">{{ $ptks->links() }}</div>
 
   <script>
     $(function(){

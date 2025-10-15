@@ -4,13 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PTK Tracker</title>
+
   @vite(['resources/css/app.css','resources/js/app.js'])
+
   <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
   <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+
+  {{-- Tempat untuk head-level stacks (opsional) --}}
+  @stack('head')
 </head>
 <body class="h-full bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
   <div class="max-w-7xl mx-auto p-6">
@@ -30,10 +36,18 @@
         <span x-show="!dark">🌙 Dark</span><span x-show="dark">☀️ Light</span>
       </button>
     </header>
+
     @if(session('ok'))
-      <div class="p-3 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 rounded mb-4">{{ session('ok') }}</div>
+      <div class="p-3 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 rounded mb-4">
+        {{ session('ok') }}
+      </div>
     @endif
-    {{ $slot }}
+
+    {{-- GANTI $slot -> yield, karena kita pakai @extends/@section --}}
+    @yield('content')
   </div>
+
+  {{-- kumpulan script halaman --}}
+  @stack('scripts')
 </body>
 </html>

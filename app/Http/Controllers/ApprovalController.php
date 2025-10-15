@@ -2,28 +2,30 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use App\Models\PTK;
 use App\Services\PTKNumberingService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ApprovalController extends Controller
 {
     /**
-     * Assign nomor saat pertama kali approve (jika belum ada),
-     * tentukan approver berdasarkan role pembuat (mapping),
-     * verifikasi bahwa current user memang role approver tsb,
-     * lalu set status Completed + approver + approved_at.
+     * Approve PTK:
+     * - Pastikan ada creator
+     * - Tentukan role approver dari mapping role creator
+     * - Validasi current user memiliki role approver tsb
+     * - Isi nomor (jika kosong) dari service
+     * - Set approver_id, approved_at, status = Completed (dan director_id jika applicable)
      */
     public function approve(Request $request, PTK $ptk)
     {
-        // pastikan PTK punya creator
-        $creator = $ptk->creator ?? null; // relasi belongsTo(User::class, 'created_by')
+        // Pastikan PTK punya creator
+        $creator = $ptk->creator ?? null; // relasi: belongsTo(User::class, 'created_by')
         if (!$creator) {
             abort(422, 'PTK tidak memiliki data pembuat (creator).');
         }
 
-        // Ambil role approver dari config mapping berbasis role pertama si creator
+        // Tentukan role approver dari mapping role pertama si creator
         $map = config('ptk_roles.approval_map', []);
         $creatorPrimaryRole = $creator->getRoleNames()->first(); // contoh: 'admin_qc'
         $approverRole = $map[$creatorPrimaryRole] ?? ($map['*'] ?? 'director');
@@ -35,22 +37,22 @@ class ApprovalController extends Controller
         }
 
         DB::transaction(function () use ($ptk, $user) {
-            // Jika PTK belum memiliki nomor final, generate dari service
+            // Isi nomor hanya jika kosong (format handled by PTKNumberingService)
             if (empty($ptk->number)) {
                 /** @var PTKNumberingService $svc */
                 $svc = app(PTKNumberingService::class);
-                // gunakan departemen PTK + waktu sekarang (atau bisa pakai approved_at nanti)
+                // Contoh hasil: PTK/{DEPT}/2025/10/001
                 $ptk->number = $svc->nextNumber($ptk->department_id, now());
             }
 
-            // Set approval final
-            $ptk->approver_id = $user->id; // user yang menyetujui
+            // Set data approval final
+            $ptk->approver_id = auth()->id();
             $ptk->approved_at = now();
             $ptk->status      = 'Completed';
 
-            // Jika yang approve adalah director, isi juga director_id (opsional)
+            // Jika yang approve adalah director, simpan juga director_id (opsional)
             if ($user->hasRole('director')) {
-                $ptk->director_id = $user->id;
+                $ptk->director_id = auth()->id();
             }
 
             $ptk->save();
@@ -60,8 +62,8 @@ class ApprovalController extends Controller
     }
 
     /**
-     * Kembalikan ke Not Started (reset approval).
-     * Catatan: "number" TIDAK disentuh agar histori nomor tidak rusak.
+     * Reject / kembalikan ke Not Started (reset approval).
+     * Catatan: kolom number TIDAK diubah agar histori nomor tetap terjaga.
      */
     public function reject(Request $request, PTK $ptk)
     {

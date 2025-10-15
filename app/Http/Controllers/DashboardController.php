@@ -2,67 +2,96 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
+use App\Models\PTK;
+use App\Support\DeptScope;
+use Carbon\Carbon;
+use Carbon\CarbonPeriod;
 
 class DashboardController extends Controller
 {
-    public function index(Request $request)
+    public function index()
     {
-        $kpi = [
-            'total'      => 0,
-            'inProgress' => 0,
-            'completed'  => 0,
-            'overdue'    => 0,
-            'sla'        => 0,
-        ];
-        $trendLabels = [];
-        $trendValues = [];
-        $topDept = collect();
-        $overdueList = collect();
+        $to   = now()->endOfDay();
+        $from = now()->subWeeks(26)->startOfWeek();   // ~6 bulan = 26 minggu
 
-        if (class_exists(\App\Models\PTK::class)) {
-            $PTK = \App\Models\PTK::query();
-            $kpi['total']      = (clone $PTK)->count();
-            $kpi['inProgress'] = (clone $PTK)->where('status','In Progress')->count();
-            $kpi['completed']  = (clone $PTK)->where('status','Completed')->count();
-            $overdueQuery = (clone $PTK)
-                ->whereIn('status',['Not Started','In Progress'])
-                ->whereDate('due_date','<', now()->toDateString());
-            $kpi['overdue'] = $overdueQuery->count();
-            $overdueList    = $overdueQuery->with(['pic','department'])->latest()->limit(10)->get();
-
-            $completed = (clone $PTK)->where('status','Completed')->count();
-            $slaOK     = (clone $PTK)->where('status','Completed')
-                            ->whereColumn('approved_at','<=','due_date')->count();
-            $kpi['sla'] = $completed ? round($slaOK / max(1,$completed) * 100, 1) : 0;
-
-            $trend = (clone $PTK)
-                ->selectRaw("DATE_FORMAT(created_at,'%Y-%m') as ym, COUNT(*) as total")
-                ->where('created_at','>=', now()->subMonths(5)->startOfMonth())
-                ->groupBy('ym')->orderBy('ym')->get();
-            $trendLabels = $trend->pluck('ym')->values()->all();
-            $trendValues = $trend->pluck('total')->values()->all();
-
-            if (class_exists(\App\Models\Department::class)) {
-                $topDept = \App\Models\Department::query()
-                    ->withCount('ptk')
-                    ->orderByDesc('ptk_count')->limit(5)->get(['id','name']);
-                // mini sparkline (count PTK 6 bulan per dept)
-                $sparks = [];
-                foreach ($topDept as $d) {
-                    $rows = \App\Models\PTK::selectRaw("DATE_FORMAT(created_at,'%Y-%m') as ym, COUNT(*) as total")
-                        ->where('department_id', $d->id)
-                        ->where('created_at','>=', now()->subMonths(5)->startOfMonth())
-                        ->groupBy('ym')->orderBy('ym')->get();
-                    $sparks[$d->id] = [
-                        'labels' => $rows->pluck('ym')->values()->all(),
-                        'values' => $rows->pluck('total')->values()->all(),
-                    ];
-                }
-                $topDept->each(function($d) use ($sparks){ $d->spark = $sparks[$d->id] ?? ['labels'=>[],'values'=>[]]; });
-            }
+        // base query + scope departemen (non-director/auditor)
+        $q = PTK::with(['department','category','subcategory']);
+        $allowed = DeptScope::allowedDeptIds(auth()->user());
+        if (!empty($allowed)) {
+            $q->whereIn('department_id', $allowed);
         }
 
-        return view('dashboard.index', compact('kpi','trendLabels','trendValues','topDept','overdueList'));
+        // ===== Weekly trend (26 minggu) =====
+        $rows = (clone $q)
+            ->whereBetween('created_at', [$from, $to])
+            ->get(['id','created_at']);
+
+        // kelompokkan per awal minggu (Senin)
+        $bucketed = $rows->groupBy(function($p){
+            return Carbon::parse($p->created_at)->startOfWeek()->format('Y-m-d');
+        })->map->count();
+
+        // isi 26 minggu dengan nol jika tidak ada data
+        $period = CarbonPeriod::create($from, '1 week', $to);
+        $labels = [];
+        $data   = [];
+        foreach ($period as $wstart) {
+            $key      = $wstart->format('Y-m-d');
+            $labels[] = $wstart->format('W'); // nomor minggu 01..52
+            $data[]   = (int)($bucketed[$key] ?? 0);
+        }
+
+        // ===== KPI ringkas =====
+        $total      = (clone $q)->count();
+        $inProgress = (clone $q)->where('status','In Progress')->count();
+        $completed  = (clone $q)->where('status','Completed')->count();
+        $overdue    = (clone $q)->where('status','!=','Completed')->whereDate('due_date','<', today())->count();
+
+        // ===== SLA 6 bulan (Completed on time) =====
+        $slBase    = (clone $q)->whereBetween('created_at', [$from,$to])->where('status','Completed');
+        $slaOnTime = (clone $slBase)->whereColumn('approved_at','<=','due_date')->count();
+        $slaTotal  = (clone $slBase)->count();
+        $slaPct    = $slaTotal ? round($slaOnTime * 100 / $slaTotal, 1) : 0;
+
+        // ===== Top 3 (6 bulan) =====
+        $base6 = (clone $q)->whereBetween('created_at', [$from,$to]);
+
+        $topDepartments = (clone $base6)->selectRaw('department_id, COUNT(*) as total')
+            ->groupBy('department_id')->orderByDesc('total')->take(3)->get()
+            ->map(fn($r)=>['name'=>$r->department->name ?? '-', 'total'=>$r->total]);
+
+        $topCategories = (clone $base6)->selectRaw('category_id, COUNT(*) as total')
+            ->groupBy('category_id')->orderByDesc('total')->take(3)->get()
+            ->map(fn($r)=>['name'=>$r->category->name ?? '-', 'total'=>$r->total]);
+
+        $topSubcategories = (clone $base6)->whereNotNull('subcategory_id')
+            ->selectRaw('subcategory_id, COUNT(*) as total')
+            ->groupBy('subcategory_id')->orderByDesc('total')->take(3)->get()
+            ->map(fn($r)=>['name'=>$r->subcategory->name ?? '-', 'total'=>$r->total]);
+
+        // ===== Overdue Top 10 (belum Completed & due_date < today) =====
+        $overdueTop = (clone $q)
+            ->with(['pic','department'])
+            ->where('status','!=','Completed')
+            ->whereDate('due_date','<', today())
+            ->orderBy('due_date')   // paling lama di atas
+            ->take(10)
+            ->get(['id','number','title','pic_user_id','department_id','due_date','status']);
+
+        return view('dashboard', [
+            'total'            => $total,
+            'inProgress'       => $inProgress,
+            'completed'        => $completed,
+            'overdue'          => $overdue,
+            'labels'           => $labels,
+            'series'           => $data,
+            'slaPct'           => $slaPct,
+            'topDepartments'   => $topDepartments,
+            'topCategories'    => $topCategories,
+            'topSubcategories' => $topSubcategories,
+            'from'             => $from,
+            'to'               => $to,
+            'overdueTop'       => $overdueTop,
+        ]);
     }
 }

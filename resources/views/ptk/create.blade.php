@@ -78,10 +78,33 @@
       @error('due_date') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
+    {{-- Deskripsi umum (opsional) --}}
     <label for="description" class="md:col-span-2">Deskripsi
       <textarea id="description" name="description" rows="6" class="border p-2 rounded w-full">{{ old('description') }}</textarea>
       @error('description') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
+
+    {{-- 🔽 Tambahan 4 bagian deskripsi sesuai instruksi --}}
+    <label class="md:col-span-2">Deskripsi Ketidaksesuaian
+      <textarea name="description_nc" rows="5" class="border p-2 rounded w-full">{{ old('description_nc') }}</textarea>
+      @error('description_nc') <small class="text-red-600">{{ $message }}</small> @enderror
+    </label>
+
+    <label class="md:col-span-2">Evaluasi Masalah
+      <textarea name="evaluation" rows="5" class="border p-2 rounded w-full">{{ old('evaluation') }}</textarea>
+      @error('evaluation') <small class="text-red-600">{{ $message }}</small> @enderror
+    </label>
+
+    <label class="md:col-span-2">3a. Koreksi (perbaikan masalah)
+      <textarea name="correction_action" rows="5" class="border p-2 rounded w-full">{{ old('correction_action') }}</textarea>
+      @error('correction_action') <small class="text-red-600">{{ $message }}</small> @enderror
+    </label>
+
+    <label class="md:col-span-2">3b. Tindakan Korektif (akar masalah)
+      <textarea name="corrective_action" rows="5" class="border p-2 rounded w-full">{{ old('corrective_action') }}</textarea>
+      @error('corrective_action') <small class="text-red-600">{{ $message }}</small> @enderror
+    </label>
+    {{-- 🔼 End tambahan --}}
 
     <label for="attachments" class="md:col-span-2">Lampiran (multiple)
       {{-- penting: name berupa array --}}
