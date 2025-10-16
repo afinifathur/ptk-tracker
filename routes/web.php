@@ -55,7 +55,7 @@ Route::middleware('auth')->group(function () {
         ->middleware('throttle:uploads');
 
     // ======================
-    // Approval
+    // Approval & Submit
     // ======================
     Route::post('ptk/{ptk}/approve', [ApprovalController::class, 'approve'])
         ->name('ptk.approve')
@@ -64,6 +64,10 @@ Route::middleware('auth')->group(function () {
     Route::post('ptk/{ptk}/reject', [ApprovalController::class, 'reject'])
         ->name('ptk.reject')
         ->middleware('permission:ptk.reject');
+
+    // Tombol "Submit PTK" (halaman detail)
+    Route::post('ptk/{ptk}/submit', [PTKController::class, 'submit'])
+        ->name('ptk.submit');
 
     // ======================
     // Settings: Kategori & Subkategori
@@ -94,6 +98,9 @@ Route::middleware('auth')->group(function () {
     // Exports (+ Audit)
     // ======================
     Route::prefix('exports')->name('exports.')->group(function () {
+        // Preview single PTK (🔹 route baru)
+        Route::get('preview/{ptk}', [ExportController::class, 'preview'])->name('preview');
+
         // Form & laporan rentang tanggal
         Route::get('range',  [ExportController::class, 'rangeForm'])->name('range.form');
         Route::post('range', [ExportController::class, 'rangeReport'])->name('range.report');
@@ -105,7 +112,7 @@ Route::middleware('auth')->group(function () {
         Route::post('range/pdf',   [ExportController::class, 'rangePdf'])->name('range.pdf');
 
         // Audit
-        Route::get('/audits', [AuditController::class, 'index'])
+        Route::get('audits', [AuditController::class, 'index'])
             ->name('audits.index')
             ->middleware('permission:menu.audit');
     });

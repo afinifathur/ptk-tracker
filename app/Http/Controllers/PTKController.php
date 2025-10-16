@@ -129,7 +129,16 @@ class PTKController extends Controller
 
     public function show(PTK $ptk)
     {
-        $ptk->load(['attachments', 'pic', 'department', 'category', 'subcategory', 'creator']);
+        // Lengkapi relasi untuk tampilan detail
+        $ptk->load([
+            'pic:id,name',
+            'department:id,name',
+            'category:id,name',
+            'subcategory:id,name',
+            'creator:id,name',
+            'attachments',
+        ]);
+
         return view('ptk.show', compact('ptk'));
     }
 
@@ -179,6 +188,14 @@ class PTKController extends Controller
         if ($request->user()->hasAnyRole($this->deptAdminRoles)) {
             $data['department_id'] = $request->user()->department_id;
         }
+
+        // ---------- Opsi perapihan status otomatis ----------
+        // Jika evaluation diisi (di update ini) dan status lama Not Started,
+        // set status menjadi In Progress
+        if ($request->filled('evaluation') && $ptk->status === 'Not Started') {
+            $data['status'] = 'In Progress';
+        }
+        // -----------------------------------------------------
 
         $ptk->update(collect($data)->except(['attachments'])->toArray());
 
@@ -230,36 +247,21 @@ class PTKController extends Controller
 
     /**
      * QUEUE — antrian persetujuan
+     * Hanya tampil PTK yang sudah selesai (Completed) dan belum punya nomor.
      */
     public function queue(Request $request)
-    {
-        $user = $request->user();
+{
+    // Tampilkan hanya PTK yang sudah Completed dan belum punya nomor
+    $q = PTK::with(['pic:id,name', 'department:id,name'])
+        ->where('status', 'Completed')
+        ->whereNull('number')
+        ->latest();
 
-        $q = PTK::query()
-            ->where('status', '!=', 'Completed')
-            ->whereNull('approver_id');
+    // Kembalikan ke pola lama: kirim ke view sebagai $items + paginate
+    $items = $q->paginate(20)->withQueryString();
 
-        // Dept scope filter
-        $allowed = DeptScope::allowedDeptIds($user);
-        if (!empty($allowed)) {
-            $q->whereIn('department_id', $allowed);
-        }
-
-        // Filter tambahan berdasarkan role pembuat (creator)
-        if ($user->hasRole('kabag_qc')) {
-            $q->whereHas('creator', fn ($c) => $c->role('admin_qc'));
-        } elseif ($user->hasRole('manager_hr')) {
-            $q->whereHas('creator', function ($c) {
-                $c->whereHas('roles', function ($r) {
-                    $r->whereIn('name', ['admin_hr', 'admin_k3']);
-                });
-            });
-        }
-
-        $items = $q->latest()->paginate(20)->withQueryString();
-
-        return view('ptk.queue', compact('items'));
-    }
+    return view('ptk.queue', compact('items'));
+}
 
     public function recycle(Request $request)
     {
@@ -282,6 +284,26 @@ class PTKController extends Controller
         $ptk->restore();
 
         return back()->with('ok', 'PTK dipulihkan.');
+    }
+
+    /**
+     * SUBMIT — ubah status ke Completed jika evaluasi sudah ada.
+     */
+    public function submit(PTK $ptk)
+    {
+        // (opsional tapi direkomendasikan) pastikan user boleh mengupdate PTK ini
+        $this->authorize('update', $ptk);
+
+        // hanya bisa submit jika sudah isi evaluasi
+        if (empty($ptk->evaluation)) {
+            return back()->with('error', 'PTK belum bisa disubmit — evaluasi masalah belum diisi.');
+        }
+
+        $ptk->update(['status' => 'Completed']);
+
+        return redirect()
+            ->route('ptk.show', $ptk)
+            ->with('ok', 'PTK telah disubmit dan siap untuk approval.');
     }
 
     public function forceDelete(Request $request, $id)

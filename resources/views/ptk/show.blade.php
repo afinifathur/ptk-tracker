@@ -1,111 +1,147 @@
-{{-- resources/views/ptk/show.blade.php --}}
 <x-layouts.app>
-  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-    <h2 class="text-xl font-semibold">
-      PTK {{ $ptk->number }}
-    </h2>
+  <div class="space-y-6" x-data="{preview:false, imgSrc:'', imgCaption:''}">
+    {{-- Header & aksi --}}
+    <div class="flex items-center justify-between">
+      <h1 class="text-xl font-semibold">PTK {{ $ptk->number ?? '-' }}</h1>
 
-    <div class="flex flex-wrap items-center gap-2">
-      @can('update', $ptk)
-        <a href="{{ route('ptk.edit', $ptk) }}"
-           class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-          Edit
-        </a>
-      @endcan
+      <div class="flex flex-wrap gap-2">
+        {{-- Tombol Submit PTK (role admin dept & belum Completed) --}}
+        @role('admin_qc|admin_hr|admin_k3')
+          @if(in_array($ptk->status, ['In Progress','Not Started']))
+            <form method="POST" action="{{ route('ptk.submit', $ptk) }}">
+              @csrf
+              <button class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
+                Submit PTK
+              </button>
+            </form>
+          @endif
+        @endrole
 
-      {{-- Tombol Download PDF --}}
-      <a href="{{ route('exports.pdf', $ptk) }}"
-         class="px-3 py-2 bg-gray-800 text-white rounded hover:bg-gray-900">
-        Download PDF
-      </a>
+        @can('ptk.update')
+          <a href="{{ route('ptk.edit',$ptk) }}" class="px-3 py-2 bg-blue-600 text-white rounded-lg">Edit</a>
+        @endcan
 
-      @can('delete', $ptk)
-        <form method="post" action="{{ route('ptk.destroy', $ptk) }}" class="inline"
-              onsubmit="return confirm('Yakin menghapus PTK ini?');">
-          @csrf
-          @method('DELETE')
-          <button type="submit"
-                  class="px-3 py-2 bg-rose-600 text-white rounded hover:bg-rose-700">
-            Delete
-          </button>
-        </form>
-      @endcan
-    </div>
-  </div>
+        <a href="{{ route('exports.pdf',$ptk->id) }}" class="px-3 py-2 bg-gray-800 text-white rounded-lg">Download PDF</a>
 
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-    {{-- Kolom kiri: ringkasan PTK --}}
-    <div class="p-4 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-      <div class="text-sm text-gray-500 dark:text-gray-400">Judul</div>
-      <div class="font-medium">{{ $ptk->title }}</div>
-
-      <div class="mt-3 text-sm text-gray-500 dark:text-gray-400">Status</div>
-      <x-ui.stat-badge :status="$ptk->status" />
-
-      <div class="mt-3 text-sm text-gray-500 dark:text-gray-400">Kategori / Departemen</div>
-      <div>
-        {{ $ptk->category->name ?? '-' }}
-        @if($ptk->subcategory) / {{ $ptk->subcategory->name }} @endif
-        / {{ $ptk->department->name ?? '-' }}
-      </div>
-
-      <div class="mt-3 text-sm text-gray-500 dark:text-gray-400">PIC</div>
-      <div>{{ $ptk->pic->name ?? '-' }}</div>
-
-      <div class="mt-3 text-sm text-gray-500 dark:text-gray-400">Due / Approved</div>
-      <div>
-        {{ optional($ptk->due_date)->format('Y-m-d') ?? '-' }}
-        /
-        {{ optional($ptk->approved_at)->format('Y-m-d') ?? '-' }}
+        @can('ptk.update')
+          <form method="POST" action="{{ route('ptk.destroy',$ptk) }}"
+                onsubmit="return confirm('Yakin hapus PTK ini?')">
+            @csrf @method('DELETE')
+            <button class="px-3 py-2 bg-rose-600 text-white rounded-lg">Delete</button>
+          </form>
+        @endcan
       </div>
     </div>
 
-    {{-- Kolom kanan: deskripsi & lampiran --}}
-    <div class="p-4 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-      <div class="text-sm text-gray-500 dark:text-gray-400">Deskripsi</div>
-      <div class="whitespace-pre-wrap">{{ $ptk->description }}</div>
+    {{-- Meta ringkas --}}
+    @php
+      $badge = match($ptk->status){
+        'Completed'   => 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-100',
+        'In Progress' => 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-100',
+        default       => 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200',
+      };
+    @endphp
 
-      <div class="mt-4 text-sm text-gray-500 dark:text-gray-400">Lampiran</div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div class="bg-white dark:bg-gray-800 rounded-xl p-5 shadow">
+        <div class="text-xs text-gray-500">Judul</div>
+        <div class="text-lg font-semibold mb-3">{{ $ptk->title }}</div>
 
-      <ul class="list-disc ml-5 space-y-4">
-        @forelse($ptk->attachments as $a)
-          @php
-            $url  = asset('storage/' . $a->path);
-            $isImg = isset($a->mime) && str_starts_with(strtolower($a->mime), 'image/');
-          @endphp
-          <li class="space-y-1">
-            <div class="flex items-start gap-3">
-              <a class="underline hover:no-underline break-all" href="{{ $url }}" target="_blank" rel="noopener">
-                {{ $a->original_name ?? basename($a->path) }}
-              </a>
+        <div class="text-xs text-gray-500">Status</div>
+        <div class="mb-3">
+          <span class="px-2 py-1 rounded text-xs font-medium {{ $badge }}">{{ $ptk->status }}</span>
+        </div>
+
+        <div class="text-xs text-gray-500">Kategori / Departemen</div>
+        <div class="mb-3">
+          {{ $ptk->category->name ?? '-' }}
+          @if($ptk->subcategory) <span class="text-gray-400">/</span> {{ $ptk->subcategory->name }} @endif
+          <span class="text-gray-400"> • </span> {{ $ptk->department->name ?? '-' }}
+        </div>
+
+        <div class="text-xs text-gray-500">PIC</div>
+        <div class="mb-3">{{ $ptk->pic->name ?? '-' }}</div>
+
+        <div class="text-xs text-gray-500">Due / Approved</div>
+        <div>{{ optional($ptk->due_date)->format('Y-m-d') }} / {{ optional($ptk->approved_at)->format('Y-m-d') ?? '-' }}</div>
+      </div>
+
+      {{-- Dokumen ringkasan deskripsi lama (opsional) --}}
+      <div class="bg-white dark:bg-gray-800 rounded-xl p-5 shadow">
+        <div class="text-xs text-gray-500">Deskripsi singkat</div>
+        <div class="prose dark:prose-invert max-w-none">{!! nl2br(e($ptk->description ?? '—')) !!}</div>
+      </div>
+    </div>
+
+    {{-- SECTION UTAMA (vertikal seperti PDF) --}}
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow space-y-6">
+      <div>
+        <h2 class="font-semibold mb-2">1. Deskripsi Ketidaksesuaian</h2>
+        <div class="prose dark:prose-invert max-w-none">{!! nl2br(e($ptk->description_nc ?? '—')) !!}</div>
+      </div>
+
+      <div>
+        <h2 class="font-semibold mb-2">2. Evaluasi Masalah (Analisis)</h2>
+        <div class="prose dark:prose-invert max-w-none">{!! nl2br(e($ptk->evaluation ?? '—')) !!}</div>
+      </div>
+
+      <div>
+        <h2 class="font-semibold mb-2">3a. Tindakan Koreksi</h2>
+        <div class="prose dark:prose-invert max-w-none">{!! nl2br(e($ptk->correction_action ?? '—')) !!}</div>
+      </div>
+
+      <div>
+        <h2 class="font-semibold mb-2">3b. Tindakan Korektif</h2>
+        <div class="prose dark:prose-invert max-w-none">{!! nl2br(e($ptk->corrective_action ?? '—')) !!}</div>
+      </div>
+    </div>
+
+    {{-- LAMPIRAN (galeri + modal preview) --}}
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow">
+      <h2 class="font-semibold mb-3">Lampiran</h2>
+
+      @if($ptk->attachments->count())
+        <ul class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          @foreach($ptk->attachments as $att)
+            @php
+              $url = \Illuminate\Support\Facades\Storage::url($att->path);
+              $isImg = str_starts_with($att->mime, 'image/');
+            @endphp
+
+            <li class="group">
               @if($isImg)
-                <a href="{{ $url }}" target="_blank" rel="noopener" class="shrink-0">
-                  <img src="{{ $url }}" alt="preview"
-                       class="ml-1 mt-0.5 h-10 w-10 object-cover rounded border border-gray-200 dark:border-gray-700" />
+                <button type="button"
+                        class="block w-full aspect-[4/3] overflow-hidden rounded-lg ring-1 ring-gray-200 dark:ring-gray-700"
+                        x-on:click="imgSrc='{{ $url }}'; imgCaption='{{ $att->original_name }}'; preview=true">
+                  <img src="{{ $url }}" alt="{{ $att->original_name }}"
+                       class="w-full h-full object-cover group-hover:scale-105 transition"/>
+                </button>
+              @else
+                <a href="{{ $url }}" target="_blank"
+                   class="flex items-center justify-center w-full aspect-[4/3] rounded-lg ring-1 ring-gray-200 dark:ring-gray-700 bg-gray-50 dark:bg-gray-900">
+                  <span class="text-xs text-gray-600 dark:text-gray-300">{{ strtoupper(pathinfo($att->original_name, PATHINFO_EXTENSION)) }}</span>
                 </a>
               @endif
-            </div>
+              <div class="mt-1 text-xs truncate" title="{{ $att->original_name }}">{{ $att->original_name }}</div>
+            </li>
+          @endforeach
+        </ul>
+      @else
+        <div class="text-sm text-gray-500">Tidak ada lampiran</div>
+      @endif
+    </div>
 
-            {{-- 🔽 Form caption kecil --}}
-            <div>
-              <form method="post" action="{{ route('attachments.caption', $a) }}" class="flex gap-2 items-center mt-1">
-                @csrf
-                @method('PATCH')
-                <input name="caption"
-                       value="{{ old('caption', $a->caption) }}"
-                       class="border p-1 rounded w-64 text-sm"
-                       placeholder="Keterangan foto (opsional)">
-                <button class="px-2 py-1 text-sm bg-gray-800 text-white rounded hover:bg-gray-900">Simpan</button>
-              </form>
-              @if($a->caption)
-                <div class="text-xs text-gray-500 mt-1">Keterangan: {{ $a->caption }}</div>
-              @endif
-            </div>
-          </li>
-        @empty
-          <li>Tidak ada lampiran</li>
-        @endforelse
-      </ul>
+    {{-- MODAL PREVIEW --}}
+    <div x-show="preview" x-transition
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+         x-cloak
+         x-on:keydown.escape.window="preview=false">
+      <div class="relative max-w-5xl w-full">
+        <button class="absolute -top-3 -right-3 bg-white text-gray-700 rounded-full w-8 h-8 shadow"
+                x-on:click="preview=false">✕</button>
+        <img :src="imgSrc" :alt="imgCaption" class="w-full rounded-lg shadow-lg">
+        <div class="mt-2 text-center text-white text-sm" x-text="imgCaption"></div>
+      </div>
     </div>
   </div>
 </x-layouts.app>

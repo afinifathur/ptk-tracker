@@ -11,12 +11,24 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Panggil seeder inisialisasi lain kalau ada
-        if (class_exists(\Database\Seeders\InitSeeder::class)) {
-            $this->call(\Database\Seeders\InitSeeder::class);
+        /**
+         * Jalankan seeder inisialisasi lain (jika ada)
+         */
+        if (class_exists(InitSeeder::class)) {
+            $this->call(InitSeeder::class);
         }
 
-        // Registrasikan & jalankan PTKInitSeeder
-        $this->call(\Database\Seeders\PTKInitSeeder::class);
+        /**
+         * Jalankan seeder Role & Permission
+         * (Akan membuat role, permission, dan user contoh jika diaktifkan)
+         */
+        $this->call(RolePermissionSeeder::class);
+
+        /**
+         * Jalankan seeder PTK (kalau ada)
+         */
+        if (class_exists(PTKInitSeeder::class)) {
+            $this->call(PTKInitSeeder::class);
+        }
     }
 }

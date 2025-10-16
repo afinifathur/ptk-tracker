@@ -31,7 +31,84 @@ class ExportController extends Controller
         return Excel::download(new PTKExport($request, $allowed), 'ptk.xlsx');
     }
 
-    /** Export satu PTK ke PDF */
+    /** 🔹 Preview satu PTK ke PDF (inline, tanpa download) + set session flag */
+    public function preview(Request $request, $ptkId)
+    {
+        // Ambil PTK + relasi yang diperlukan di template PDF
+        $ptk = PTK::with([
+            'attachments', 'pic', 'department', 'category', 'subcategory',
+            'creator', 'approver', 'director',
+        ])->findOrFail($ptkId);
+
+        // Autorisasi & DeptScope check (konsisten dengan pdf())
+        $this->authorize('view', $ptk);
+        $allowed = DeptScope::allowedDeptIds($request->user());
+        if (!empty($allowed) && !in_array($ptk->department_id, $allowed, true)) {
+            abort(403);
+        }
+
+        // Hash dokumen (untuk QR + verifikasi)
+        $docHash = hash('sha256', json_encode([
+            'id'          => $ptk->id,
+            'number'      => $ptk->number,
+            'status'      => $ptk->status,
+            'due'         => $ptk->due_date?->format('Y-m-d'),
+            'approved_at' => $ptk->approved_at?->format('c'),
+            'updated_at'  => $ptk->updated_at?->format('c'),
+        ]));
+
+        // URL verifikasi + QR code (opsional bila dipakai di view)
+        $verifyUrl = route('verify.show', ['ptk' => $ptk->id, 'hash' => $docHash]);
+        try {
+            $png = QrCode::format('png')->size(120)->generate($verifyUrl);
+            $qrBase64 = 'data:image/png;base64,' . base64_encode($png);
+        } catch (\Throwable $e) {
+            $qrBase64 = null;
+        }
+
+        // Logo & tanda tangan (opsional; sesuaikan dengan isi view)
+        $companyLogoBase64 = $this->b64(public_path('brand/logo.png'));
+        $signAdmin    = $this->b64(public_path('brand/signatures/admin.png'));
+        $signApprover = $this->b64(public_path('brand/signatures/approver.png'));
+        $signDirector = $this->b64(public_path('brand/signatures/director.png'));
+
+        // Embed lampiran gambar (maks 6)
+        $embeds = [];
+        foreach ($ptk->attachments->take(6) as $att) {
+            $mime = strtolower($att->mime ?? '');
+            if (str_starts_with($mime, 'image/')) {
+                $full = Storage::disk('public')->path($att->path);
+                if (is_file($full)) {
+                    $embeds[] = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($full));
+                }
+            }
+        }
+
+        // Render ke PDF (inline, tanpa download)
+        $pdf = Pdf::loadView('exports.ptk_pdf', [
+            'ptk'               => $ptk,
+            'docHash'           => $docHash,
+            'qrBase64'          => $qrBase64,
+            'verifyUrl'         => $verifyUrl,
+            'companyLogoBase64' => $companyLogoBase64,
+            'signAdmin'         => $signAdmin,
+            'signApprover'      => $ptk->approved_at ? $signApprover : null,
+            'signDirector'      => $signDirector,
+            'embeds'            => $embeds,
+        ])->setPaper('a4', 'portrait');
+
+        $pdf->set_option('isRemoteEnabled', true);
+        $pdf->set_option('defaultFont', 'DejaVu Sans');
+
+        // ✅ set flag "sudah preview" (dipakai untuk enable tombol Approve)
+        session()->put("previewed_ptk.{$ptk->id}", now()->toDateTimeString());
+
+        // Stream inline (Attachment=false → tampil di tab baru)
+        $safe = $ptk->number ? preg_replace('/[\\\\\/]+/','-', $ptk->number) : "PTK-{$ptk->id}";
+        return $pdf->stream("{$safe}.pdf", ['Attachment' => false]);
+    }
+
+    /** Export satu PTK ke PDF (download) */
     public function pdf(Request $request, PTK $ptk)
     {
         $this->authorize('view', $ptk);
@@ -156,7 +233,7 @@ class ExportController extends Controller
         $qBase = clone $q;
 
         $topCategories = (clone $qBase)
-            ->reorder() // hapus orderBy('created_at') yang diwariskan
+            ->reorder()
             ->selectRaw('category_id, COUNT(*) as total')
             ->groupBy('category_id')
             ->orderByDesc('total')

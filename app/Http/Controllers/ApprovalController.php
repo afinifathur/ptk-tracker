@@ -11,6 +11,7 @@ class ApprovalController extends Controller
 {
     /**
      * Approve PTK:
+     * - Wajib preview PDF dulu (cek session flag)
      * - Pastikan ada creator
      * - Tentukan role approver dari mapping role creator
      * - Validasi current user memiliki role approver tsb
@@ -19,6 +20,12 @@ class ApprovalController extends Controller
      */
     public function approve(Request $request, PTK $ptk)
     {
+        // 🔒 Wajib preview PDF dulu (flag diset di ExportController@preview)
+        $previewed = session("previewed_ptk.{$ptk->id}");
+        if (!$previewed) {
+            return back()->with('error', 'Harap buka Preview PDF terlebih dahulu sebelum Approve.');
+        }
+
         // Pastikan PTK punya creator
         $creator = $ptk->creator ?? null; // relasi: belongsTo(User::class, 'created_by')
         if (!$creator) {
@@ -41,7 +48,7 @@ class ApprovalController extends Controller
             if (empty($ptk->number)) {
                 /** @var PTKNumberingService $svc */
                 $svc = app(PTKNumberingService::class);
-                // Contoh hasil: PTK/{DEPT}/2025/10/001
+                // Contoh hasil: PTK/{DEPT}/YYYY/MM/NNN
                 $ptk->number = $svc->nextNumber($ptk->department_id, now());
             }
 
