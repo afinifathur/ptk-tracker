@@ -1,61 +1,80 @@
 <x-layouts.app>
   @php
-    // ===== GUARD & FALLBACK =====
-    $ptks          = $ptks          ?? collect();
-    $items         = $items         ?? $ptks;   // kompatibel dengan view lama
+    // ===== Guards & defaults =====
+    $items         = ($items ?? ($ptks ?? collect())) ?? collect();
     $categories    = $categories    ?? collect();
     $departments   = $departments   ?? collect();
     $subcategories = $subcategories ?? collect();
 
-    // Top 3 guard
+    // Top 3 (opsional)
     $topCategories    = $topCategories    ?? collect();
     $topDepartments   = $topDepartments   ?? collect();
     $topSubcategories = $topSubcategories ?? collect();
 
-    // Fallback data periode & filter (pakai struktur $data jika ada)
-    $start = $data['start'] ?? ($start ?? '-');
-    $end   = $data['end']   ?? ($end   ?? '-');
+    // ===== Filters in-use (ambil dari $selected -> $data -> request) =====
+    $filters = [
+      'start'          => $start ?? ($data['start'] ?? request('start')),
+      'end'            => $end   ?? ($data['end']   ?? request('end')),
+      'category_id'    => $selected['category_id']    ?? ($data['category_id']    ?? request('category_id')),
+      'subcategory_id' => $selected['subcategory_id'] ?? ($data['subcategory_id'] ?? request('subcategory_id')),
+      'department_id'  => $selected['department_id']  ?? ($data['department_id']  ?? request('department_id')),
+      'status'         => $selected['status']         ?? ($data['status']         ?? request('status')),
+    ];
 
-    $catId = $data['category_id']    ?? null;
-    $depId = $data['department_id']  ?? null;
-    $subId = $data['subcategory_id'] ?? null;
-    $sts   = $data['status']         ?? ($status ?? 'Semua');
+    // ===== Labels ringkasan (pakai meta jika ada; fallback dari lookup) =====
+    $metaCategory   = ($category_name    ?? null);
+    $metaSubcat     = ($subcategory_name ?? null);
+    $metaDept       = ($department_name  ?? null);
+    $metaStatus     = ($status_label     ?? null);
 
-    $cat = optional($categories->firstWhere('id', $catId))->name ?? 'Semua';
-    $dep = optional($departments->firstWhere('id', $depId))->name ?? 'Semua';
-    $sub = optional($subcategories->firstWhere('id', $subId))->name ?? 'Semua';
+    $cat = $metaCategory
+          ?? optional($categories->firstWhere('id', $filters['category_id']))->name
+          ?? 'Semua';
+    $sub = $metaSubcat
+          ?? optional($subcategories->firstWhere('id', $filters['subcategory_id']))->name
+          ?? 'Semua';
+    $dep = $metaDept
+          ?? optional($departments->firstWhere('id', $filters['department_id']))->name
+          ?? 'Semua';
+    $sts = $metaStatus ?? ($filters['status'] ?: 'Semua');
+
+    $rangeStart = $filters['start'] ?: '-';
+    $rangeEnd   = $filters['end']   ?: '-';
   @endphp
 
   <div class="flex items-center justify-between mb-3">
     <div>
-      <h2 class="text-xl font-semibold">Laporan {{ $start }} s.d. {{ $end }}</h2>
+      <h2 class="text-xl font-semibold">Laporan {{ $rangeStart }} s.d. {{ $rangeEnd }}</h2>
       <div class="text-sm text-gray-500">
         Kategori <strong>{{ $cat }}</strong> ·
         Subkategori <strong>{{ $sub }}</strong> ·
         Departemen <strong>{{ $dep }}</strong> ·
-        Status <strong>{{ $sts ?? 'Semua' }}</strong>
+        Status <strong>{{ $sts }}</strong>
       </div>
     </div>
 
     <div class="space-x-2">
-      <form method="post" action="{{ route('exports.range.excel') }}" class="inline">
+      {{-- Form export Excel: kirim SEMUA filter --}}
+      <form method="POST" action="{{ route('exports.range.excel') }}" class="inline">
         @csrf
-        <input type="hidden" name="start" value="{{ $start }}">
-        <input type="hidden" name="end" value="{{ $end }}">
-        <input type="hidden" name="subcategory_id" value="{{ $subId ?? '' }}">
-        {{-- Opsional: ikutkan filter lain agar konsisten dengan tampilan --}}
-        {{-- <input type="hidden" name="category_id" value="{{ $catId ?? '' }}"> --}}
-        {{-- <input type="hidden" name="department_id" value="{{ $depId ?? '' }}"> --}}
-        {{-- <input type="hidden" name="status" value="{{ $sts ?? '' }}"> --}}
+        <input type="hidden" name="start" value="{{ $filters['start'] }}">
+        <input type="hidden" name="end" value="{{ $filters['end'] }}">
+        <input type="hidden" name="category_id" value="{{ $filters['category_id'] }}">
+        <input type="hidden" name="subcategory_id" value="{{ $filters['subcategory_id'] }}">
+        <input type="hidden" name="department_id" value="{{ $filters['department_id'] }}">
+        <input type="hidden" name="status" value="{{ $filters['status'] }}">
         <button class="px-3 py-2 bg-green-600 text-white rounded">Export Excel</button>
       </form>
 
-      <form method="post" action="{{ route('exports.range.pdf') }}" class="inline">
+      {{-- Form export PDF: kirim SEMUA filter --}}
+      <form method="POST" action="{{ route('exports.range.pdf') }}" class="inline">
         @csrf
-        <input type="hidden" name="start" value="{{ $start }}">
-        <input type="hidden" name="end" value="{{ $end }}">
-        <input type="hidden" name="subcategory_id" value="{{ $subId ?? '' }}">
-        {{-- Filter lain opsional, sama seperti di atas --}}
+        <input type="hidden" name="start" value="{{ $filters['start'] }}">
+        <input type="hidden" name="end" value="{{ $filters['end'] }}">
+        <input type="hidden" name="category_id" value="{{ $filters['category_id'] }}">
+        <input type="hidden" name="subcategory_id" value="{{ $filters['subcategory_id'] }}">
+        <input type="hidden" name="department_id" value="{{ $filters['department_id'] }}">
+        <input type="hidden" name="status" value="{{ $filters['status'] }}">
         <button class="px-3 py-2 bg-rose-600 text-white rounded">Export PDF</button>
       </form>
     </div>

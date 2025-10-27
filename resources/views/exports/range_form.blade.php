@@ -1,104 +1,91 @@
 <x-layouts.app>
-  <h2 class="text-xl font-semibold mb-4">Laporan Periode</h2>
+  <h1 class="text-xl font-semibold mb-4">Laporan Periode</h1>
 
-  <form method="post" action="{{ route('exports.range.report') }}" class="grid grid-cols-1 lg:grid-cols-6 gap-3 items-end">
+  <form method="POST" action="{{ route('exports.range.report') }}" class="space-y-4">
     @csrf
+    <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
+      {{-- Tanggal mulai & akhir --}}
+      <div>
+        <label class="text-sm">Start</label>
+        <input type="date" name="start" class="w-full rounded border-gray-300" value="{{ old('start') }}">
+      </div>
+      <div>
+        <label class="text-sm">End</label>
+        <input type="date" name="end" class="w-full rounded border-gray-300" value="{{ old('end') }}">
+      </div>
 
-    <label class="block lg:col-span-1">Start
-      <input type="date" name="start" class="border p-2 rounded w-full" required value="{{ old('start') }}">
-      @error('start')<div class="text-red-600 text-xs mt-1">{{ $message }}</div>@enderror
-    </label>
+      {{-- Kategori --}}
+      <div>
+        <label class="text-sm">Kategori</label>
+        <select name="category_id" id="categorySelect" class="w-full rounded border-gray-300">
+          <option value="">Semua</option>
+          @foreach($categories as $cat)
+            <option value="{{ $cat->id }}" @selected(old('category_id')==$cat->id)>
+              {{ $cat->name }}
+            </option>
+          @endforeach
+        </select>
+      </div>
 
-    <label class="block lg:col-span-1">End
-      <input type="date" name="end" class="border p-2 rounded w-full" required value="{{ old('end') }}">
-      @error('end')<div class="text-red-600 text-xs mt-1">{{ $message }}</div>@enderror
-    </label>
+      {{-- Subkategori --}}
+      <div>
+        <label class="text-sm">Subkategori</label>
+        <select name="subcategory_id" id="subcategorySelect" class="w-full rounded border-gray-300">
+          <option value="">Semua</option>
+          @foreach($subcategories as $sub)
+            <option value="{{ $sub->id }}" data-category="{{ $sub->category_id }}">
+              {{ $sub->name }}
+            </option>
+          @endforeach
+        </select>
+      </div>
 
-    <label class="block lg:col-span-1">Kategori
-      <select name="category_id" id="cat" class="border p-2 rounded w-full">
-        <option value="">Semua</option>
-        @foreach($categories as $c)
-          <option value="{{ $c->id }}" @selected(old('category_id') == $c->id)>{{ $c->name }}</option>
-        @endforeach
-      </select>
-      @error('category_id')<div class="text-red-600 text-xs mt-1">{{ $message }}</div>@enderror
-    </label>
+      {{-- Departemen --}}
+      <div>
+        <label class="text-sm">Departemen</label>
+        <select name="department_id" class="w-full rounded border-gray-300">
+          <option value="">Semua</option>
+          @foreach($departments as $dep)
+            <option value="{{ $dep->id }}" @selected(old('department_id')==$dep->id)>
+              {{ $dep->name }}
+            </option>
+          @endforeach
+        </select>
+      </div>
 
-    <label class="block lg:col-span-1">Subkategori
-      <select name="subcategory_id" id="subcat" class="border p-2 rounded w-full" data-old="{{ old('subcategory_id') }}">
-        <option value="">Semua</option>
-      </select>
-      @error('subcategory_id')<div class="text-red-600 text-xs mt-1">{{ $message }}</div>@enderror
-    </label>
-
-    <label class="block lg:col-span-1">Departemen
-      <select name="department_id" class="border p-2 rounded w-full">
-        <option value="">Semua</option>
-        @foreach($departments as $d)
-          <option value="{{ $d->id }}" @selected(old('department_id') == $d->id)>{{ $d->name }}</option>
-        @endforeach
-      </select>
-      @error('department_id')<div class="text-red-600 text-xs mt-1">{{ $message }}</div>@enderror
-    </label>
-
-    <label class="block lg:col-span-1">Status
-      <select name="status" class="border p-2 rounded w-full">
-        <option value="">Semua</option>
-        @foreach(['Not Started','In Progress','Completed'] as $s)
-          <option value="{{ $s }}" @selected(old('status') == $s)>{{ $s }}</option>
-        @endforeach
-      </select>
-      @error('status')<div class="text-red-600 text-xs mt-1">{{ $message }}</div>@enderror
-    </label>
-
-    <div class="lg:col-span-6">
-      <button class="px-4 py-2 bg-blue-600 text-white rounded">Generate</button>
+      {{-- Status --}}
+      <div>
+        <label class="text-sm">Status</label>
+        <select name="status" class="w-full rounded border-gray-300">
+          <option value="">Semua</option>
+          <option value="Not Started" @selected(old('status')=='Not Started')>Not Started</option>
+          <option value="In Progress" @selected(old('status')=='In Progress')>In Progress</option>
+          <option value="Completed" @selected(old('status')=='Completed')>Completed</option>
+          <option value="Overdue" @selected(old('status')=='Overdue')>Overdue</option>
+        </select>
+      </div>
     </div>
+
+    <button type="submit" class="px-4 py-2 rounded bg-blue-600 text-white">Generate</button>
   </form>
 
-  @push('scripts')
+  {{-- JS: filter subkategori otomatis --}}
   <script>
-    async function loadSubcats(catId){
-      const sel = document.getElementById('subcat');
-      const oldVal = sel.getAttribute('data-old') || '';
-      sel.innerHTML = '<option value="">Semua</option>';
-      sel.disabled = true;
+  document.addEventListener('DOMContentLoaded', () => {
+    const cat = document.getElementById('categorySelect');
+    const sub = document.getElementById('subcategorySelect');
 
-      if(!catId){ sel.disabled = false; return; }
-
-      try{
-        const url = new URL(@json(route('api.subcategories')));
-        url.searchParams.set('category_id', catId);
-        const res = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
-        if(!res.ok) throw new Error('Failed to fetch');
-        const data = await res.json();
-
-        data.forEach(row=>{
-          const opt = document.createElement('option');
-          opt.value = row.id; opt.textContent = row.name;
-          if(String(oldVal) === String(row.id)) opt.selected = true;
-          sel.appendChild(opt);
-        });
-      }catch(e){
-        // optional: tampilkan notif error
-        console.warn('Gagal memuat subkategori', e);
-      }finally{
-        sel.disabled = false;
-      }
+    function filterSubs() {
+      const selectedCat = cat.value;
+      Array.from(sub.options).forEach(opt => {
+        const match = !selectedCat || opt.dataset.category === selectedCat || opt.value === '';
+        opt.hidden = !match;
+        if (opt.hidden && opt.selected) opt.selected = false;
+      });
     }
 
-    // Event change kategori
-    document.getElementById('cat').addEventListener('change', function(){
-      // reset old subcategory selection
-      document.getElementById('subcat').setAttribute('data-old', '');
-      loadSubcats(this.value);
-    });
-
-    // Preload saat halaman dibuka jika ada old('category_id')
-    document.addEventListener('DOMContentLoaded', function(){
-      const cat = document.getElementById('cat').value;
-      if(cat){ loadSubcats(cat); }
-    });
+    cat.addEventListener('change', filterSubs);
+    filterSubs(); // initial
+  });
   </script>
-  @endpush
 </x-layouts.app>

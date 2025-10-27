@@ -6,6 +6,7 @@ use App\Models\{Category, Subcategory, Department, User, Attachment};
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\{BelongsTo, HasMany};
+use Illuminate\Database\Eloquent\Builder;
 use OwenIt\Auditing\Contracts\Auditable as AuditableContract;
 use OwenIt\Auditing\Auditable;
 
@@ -86,6 +87,67 @@ class PTK extends Model implements AuditableContract
         }
 
         $this->attributes['number'] = $value;
+    }
+
+    // ========================
+    // Query Scopes (Visibility)
+    // ========================
+
+    /**
+     * Batasi visibilitas PTK otomatis berdasarkan role user.
+     *
+     * Contoh:
+     * PTK::visibleTo(auth()->user())->with(['department','category','pic'])->paginate(20);
+     */
+    public function scopeVisibleTo(Builder $q, User $user): Builder
+    {
+        // helper ambil id departemen by name
+        $deptId = fn(string $name) => Department::where('name', $name)->value('id');
+
+        // Full akses
+        if ($user->hasRole('director|auditor')) {
+            return $q;
+        }
+
+        // 🔸 Kabag QC lihat Flange + Fitting
+        if ($user->hasRole('kabag_qc')) {
+            $flange  = $deptId('Flange');
+            $fitting = $deptId('Fitting');
+            return $q->whereIn('department_id', array_filter([$flange, $fitting]));
+        }
+
+        // 🔸 Admin QC Flange
+        if ($user->hasRole('admin_qc_flange')) {
+            return $q->where('department_id', $deptId('Flange'));
+        }
+
+        // 🔸 Admin QC Fitting
+        if ($user->hasRole('admin_qc_fitting')) {
+            return $q->where('department_id', $deptId('Fitting'));
+        }
+
+        // 🔸 Manager HR → lihat HR + K3
+        if ($user->hasRole('manager_hr')) {
+            $hr = $deptId('HR');
+            $k3 = $deptId('K3 & Lingkungan');
+            return $q->whereIn('department_id', array_filter([$hr, $k3]));
+        }
+
+        // 🔸 Admin HR
+        if ($user->hasRole('admin_hr')) {
+            return $q->where('department_id', $deptId('HR'));
+        }
+
+        // 🔸 Admin K3
+        if ($user->hasRole('admin_k3')) {
+            return $q->where('department_id', $deptId('K3 & Lingkungan'));
+        }
+
+        // default: hanya data sendiri (PIC atau creator)
+        return $q->where(function (Builder $qq) use ($user) {
+            $qq->where('pic_user_id', $user->id)
+               ->orWhere('created_by', $user->id);
+        });
     }
 
     // ========================
