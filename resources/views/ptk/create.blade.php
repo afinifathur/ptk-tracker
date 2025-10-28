@@ -35,9 +35,9 @@
 
     {{-- Departemen: hidden utk admin dept, dropdown utk role lain --}}
     @php
-      $u = auth()->user();
-      $isDeptAdmin = $u->hasAnyRole('admin_qc','admin_hr','admin_k3');
-      $deptOldOrUser = old('department_id', $u->department_id);
+      $authUser      = auth()->user();
+      $isDeptAdmin   = $authUser->hasAnyRole('admin_qc','admin_hr','admin_k3');
+      $deptOldOrUser = old('department_id', $authUser->department_id);
     @endphp
 
     @if($isDeptAdmin)
@@ -45,13 +45,13 @@
       <div class="md:col-span-2">
         <label class="block text-sm text-gray-500">Departemen</label>
         <div class="border rounded p-2 bg-gray-50">
-          <strong>{{ $u->department->name ?? '-' }}</strong>
+          <strong>{{ $authUser->department->name ?? '-' }}</strong>
         </div>
         <input type="hidden" name="department_id" value="{{ $deptOldOrUser }}">
         @error('department_id') <small class="text-red-600">{{ $message }}</small> @enderror
       </div>
     @else
-      {{-- Manager/Director/Auditor: boleh pilih departemen dari list yang sudah difilter di controller --}}
+      {{-- Role lain: pilih dari list yang difilter di controller --}}
       <label for="department_id">Departemen
         <select id="department_id" name="department_id" class="border p-2 rounded w-full" required>
           <option value="">-- pilih --</option>
@@ -63,10 +63,11 @@
       </label>
     @endif
 
+    {{-- PIC: TIDAK di-disabled untuk role apa pun --}}
     <label for="pic_user_id">PIC
       <select id="pic_user_id" name="pic_user_id" class="border p-2 rounded w-full" required>
         <option value="">-- pilih --</option>
-        @foreach($users as $uopt)
+        @foreach(($picCandidates ?? $users) as $uopt)
           <option value="{{ $uopt->id }}" @selected(old('pic_user_id') == $uopt->id)>{{ $uopt->name }}</option>
         @endforeach
       </select>
@@ -84,7 +85,7 @@
       @error('description') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
-    {{-- 🔽 Tambahan 4 bagian deskripsi sesuai instruksi --}}
+    {{-- 4 bagian tambahan --}}
     <label class="md:col-span-2">Deskripsi Ketidaksesuaian
       <textarea name="description_nc" rows="5" class="border p-2 rounded w-full">{{ old('description_nc') }}</textarea>
       @error('description_nc') <small class="text-red-600">{{ $message }}</small> @enderror
@@ -104,10 +105,8 @@
       <textarea name="corrective_action" rows="5" class="border p-2 rounded w-full">{{ old('corrective_action') }}</textarea>
       @error('corrective_action') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
-    {{-- 🔼 End tambahan --}}
 
     <label for="attachments" class="md:col-span-2">Lampiran (multiple)
-      {{-- penting: name berupa array --}}
       <input id="attachments" type="file" name="attachments[]" multiple accept=".jpg,.jpeg,.png,.pdf" class="border p-2 rounded w-full">
       @error('attachments.*') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
@@ -125,10 +124,7 @@
       sel.innerHTML = '<option value="">-- pilih subkategori --</option>';
       sel.disabled = true;
 
-      if(!catId){
-        sel.disabled = false;
-        return;
-      }
+      if(!catId){ sel.disabled = false; return; }
 
       try{
         const res = await fetch(`{{ route('api.subcategories') }}?category_id=${encodeURIComponent(catId)}`);
@@ -139,16 +135,11 @@
           const opt = document.createElement('option');
           opt.value = row.id;
           opt.textContent = row.name;
-          if (preselectedId && String(preselectedId) === String(row.id)) {
-            opt.selected = true;
-          }
+          if (preselectedId && String(preselectedId) === String(row.id)) opt.selected = true;
           sel.appendChild(opt);
         });
-      }catch(e){
-        console.error(e);
-      }finally{
-        sel.disabled = false;
-      }
+      }catch(e){ console.error(e); }
+      finally{ sel.disabled = false; }
     }
 
     document.getElementById('category_id').addEventListener('change', function(){
@@ -157,10 +148,8 @@
 
     (function preload(){
       const oldCategory = "{{ old('category_id') }}";
-      const oldSubcat = document.getElementById('subcat').dataset.old || "";
-      if(oldCategory){
-        loadSubcats(oldCategory, oldSubcat);
-      }
+      const oldSubcat   = document.getElementById('subcat').dataset.old || "";
+      if(oldCategory){ loadSubcats(oldCategory, oldSubcat); }
     })();
   </script>
   @endpush

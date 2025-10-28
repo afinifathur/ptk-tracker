@@ -2,18 +2,35 @@
 
 namespace App\Services;
 
-use App\Models\{PTKSequence, Department};
+use App\Models\{PTK, PTKSequence, Department};
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
 class PTKNumberingService
 {
     /**
-     * Hasil contoh: PTK/QC/2025/10/001
-     *
-     * @param  int                    $departmentId
-     * @param  \DateTimeInterface     $when
-     * @return string
+     * Wrapper agar bisa dipanggil dari controller:
+     * $svc->generate($ptk)
+     */
+    public function generate(PTK $ptk, \DateTimeInterface $when = null): string
+    {
+        // Pastikan ada department_id
+        if (!$ptk->department_id) {
+            $ptk->loadMissing('department');
+            $ptk->department_id = $ptk->department_id ?? $ptk->department?->id;
+        }
+
+        if (!$ptk->department_id) {
+            throw new \RuntimeException('PTK tidak memiliki department_id.');
+        }
+
+        // Gunakan nextNumber() yang sudah ada
+        return $this->nextNumber($ptk->department_id, $when ?? now());
+    }
+
+    /**
+     * Generate nomor PTK.
+     * Contoh hasil: PTK/QC/2025/10/001
      */
     public function nextNumber(int $departmentId, \DateTimeInterface $when): string
     {
@@ -21,14 +38,14 @@ class PTKNumberingService
         $m = (int) $when->format('m');
 
         return DB::transaction(function () use ($departmentId, $Y, $m) {
-            // 1) Coba lock baris sequence yang ada
+            // 1) Lock baris sequence untuk DEPT+YEAR+MONTH
             $seq = PTKSequence::where('department_id', $departmentId)
                 ->where('year',  $Y)
                 ->where('month', $m)
                 ->lockForUpdate()
                 ->first();
 
-            // 2) Jika belum ada, buat; jika bentrok unique (race), reselect lalu lock
+            // 2) Jika belum ada, buat; handle race dengan unique constraint
             if (!$seq) {
                 try {
                     $seq = PTKSequence::create([
@@ -37,8 +54,8 @@ class PTKNumberingService
                         'month'         => $m,
                         'last_run'      => 0,
                     ]);
-                } catch (QueryException $e) {
-                    // kemungkinan duplikat karena transaksi lain membuat baris yang sama
+                } catch (QueryException) {
+                    // Transaksi lain sudah membuat; ambil ulang & lock
                     $seq = PTKSequence::where('department_id', $departmentId)
                         ->where('year',  $Y)
                         ->where('month', $m)
@@ -47,7 +64,7 @@ class PTKNumberingService
                 }
             }
 
-            // 3) Increment counter dan simpan
+            // 3) Increment counter
             $seq->last_run += 1;
             $seq->save();
 
@@ -55,8 +72,7 @@ class PTKNumberingService
             $run  = str_pad((string) $seq->last_run, 3, '0', STR_PAD_LEFT);
             $dept = Department::query()->select('code', 'name')->find($departmentId);
             $code = $dept?->code ?: $this->deriveCode($dept?->name);
-
-            $mm = str_pad((string) $m, 2, '0', STR_PAD_LEFT);
+            $mm   = str_pad((string) $m, 2, '0', STR_PAD_LEFT);
 
             return "PTK/{$code}/{$Y}/{$mm}/{$run}";
         }, 5);
@@ -64,9 +80,9 @@ class PTKNumberingService
 
     /**
      * Derive kode departemen dari nama jika kolom code kosong.
-     * - Jika mengandung 'QC'/'HR'/'K3' -> pakai itu
+     * - Jika mengandung 'QC'/'HR'/'K3' → pakai itu
      * - Jika tidak, ambil inisial huruf besar kata (maks 3)
-     * - Fallback 3 huruf pertama
+     * - Fallback: 3 huruf pertama nama
      */
     protected function deriveCode(?string $name): string
     {

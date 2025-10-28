@@ -1,14 +1,14 @@
 <?php
+declare(strict_types=1);
 
 namespace App\Models;
 
-use App\Models\{Category, Subcategory, Department, User, Attachment};
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Relations\{BelongsTo, HasMany};
 use Illuminate\Database\Eloquent\Builder;
-use OwenIt\Auditing\Contracts\Auditable as AuditableContract;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\{BelongsTo, HasMany};
+use Illuminate\Database\Eloquent\SoftDeletes;
 use OwenIt\Auditing\Auditable;
+use OwenIt\Auditing\Contracts\Auditable as AuditableContract;
 
 class PTK extends Model implements AuditableContract
 {
@@ -73,13 +73,9 @@ class PTK extends Model implements AuditableContract
         'created_by',
     ];
 
-    // ========================
-    // Mutators / Guards
-    // ========================
-
-    /**
-     * Lindungi nomor agar immutable (tidak bisa diubah setelah diisi).
-     */
+    # =========================================================
+    # MUTATOR — Lindungi nomor agar immutable
+    # =========================================================
     public function setNumberAttribute($value): void
     {
         if (!empty($this->attributes['number'])) {
@@ -89,71 +85,57 @@ class PTK extends Model implements AuditableContract
         $this->attributes['number'] = $value;
     }
 
-    // ========================
-    // Query Scopes (Visibility)
-    // ========================
-
-    /**
-     * Batasi visibilitas PTK otomatis berdasarkan role user.
-     *
-     * Contoh:
-     * PTK::visibleTo(auth()->user())->with(['department','category','pic'])->paginate(20);
-     */
+    # =========================================================
+    # SCOPE — Batasi visibilitas PTK otomatis berdasarkan role
+    # =========================================================
     public function scopeVisibleTo(Builder $q, User $user): Builder
     {
-        // helper ambil id departemen by name
-        $deptId = fn(string $name) => Department::where('name', $name)->value('id');
+        $deptId = fn($n) => Department::where('name', $n)->value('id');
 
-        // Full akses
         if ($user->hasRole('director|auditor')) {
             return $q;
         }
 
-        // 🔸 Kabag QC lihat Flange + Fitting
         if ($user->hasRole('kabag_qc')) {
-            $flange  = $deptId('Flange');
-            $fitting = $deptId('Fitting');
-            return $q->whereIn('department_id', array_filter([$flange, $fitting]));
+            return $q->whereIn('department_id', array_filter([
+                $deptId('Flange'),
+                $deptId('Fitting'),
+            ]));
         }
 
-        // 🔸 Admin QC Flange
         if ($user->hasRole('admin_qc_flange')) {
             return $q->where('department_id', $deptId('Flange'));
         }
 
-        // 🔸 Admin QC Fitting
         if ($user->hasRole('admin_qc_fitting')) {
             return $q->where('department_id', $deptId('Fitting'));
         }
 
-        // 🔸 Manager HR → lihat HR + K3
         if ($user->hasRole('manager_hr')) {
-            $hr = $deptId('HR');
-            $k3 = $deptId('K3 & Lingkungan');
-            return $q->whereIn('department_id', array_filter([$hr, $k3]));
+            return $q->whereIn('department_id', array_filter([
+                $deptId('HR'),
+                $deptId('K3 & Lingkungan'),
+            ]));
         }
 
-        // 🔸 Admin HR
         if ($user->hasRole('admin_hr')) {
             return $q->where('department_id', $deptId('HR'));
         }
 
-        // 🔸 Admin K3
         if ($user->hasRole('admin_k3')) {
             return $q->where('department_id', $deptId('K3 & Lingkungan'));
         }
 
-        // default: hanya data sendiri (PIC atau creator)
-        return $q->where(function (Builder $qq) use ($user) {
+        // Default: hanya data sendiri (PIC atau creator)
+        return $q->where(function ($qq) use ($user) {
             $qq->where('pic_user_id', $user->id)
                ->orWhere('created_by', $user->id);
         });
     }
 
-    // ========================
-    // Relationships
-    // ========================
-
+    # =========================================================
+    # RELATIONSHIPS
+    # =========================================================
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
@@ -184,17 +166,11 @@ class PTK extends Model implements AuditableContract
         return $this->belongsTo(User::class, 'director_id');
     }
 
-    /**
-     * Relasi ke user pembuat (creator)
-     */
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    /**
-     * Relasi ke attachments (foreign key: ptk_id)
-     */
     public function attachments(): HasMany
     {
         return $this->hasMany(Attachment::class, 'ptk_id');

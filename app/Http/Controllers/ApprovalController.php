@@ -1,90 +1,61 @@
 <?php
+declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
 use App\Models\PTK;
 use App\Services\PTKNumberingService;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Http\RedirectResponse;
 
 class ApprovalController extends Controller
 {
     /**
      * Approve PTK:
-     * - Wajib preview PDF dulu (cek session flag)
-     * - Pastikan ada creator
-     * - Tentukan role approver dari mapping role creator
-     * - Validasi current user memiliki role approver tsb
-     * - Isi nomor (jika kosong) dari service
-     * - Set approver_id, approved_at, status = Completed (dan director_id jika applicable)
+     * - Wajib lolos policy 'approve'
+     * - Nomor otomatis dari PTKNumberingService
+     * - Set approver & approved_at
      */
-    public function approve(Request $request, PTK $ptk)
+    public function approve(PTK $ptk, PTKNumberingService $svc): RedirectResponse
     {
-        // 🔒 Wajib preview PDF dulu (flag diset di ExportController@preview)
-        $previewed = session("previewed_ptk.{$ptk->id}");
-        if (!$previewed) {
-            return back()->with('error', 'Harap buka Preview PDF terlebih dahulu sebelum Approve.');
+        $this->authorize('approve', $ptk);
+
+        // Generate nomor (mis: PTK/{DEPT}/{YY}/{MM}/{RUN})
+        if (empty($ptk->number)) {
+            $ptk->number = $svc->generate($ptk);
         }
 
-        // Pastikan PTK punya creator
-        $creator = $ptk->creator ?? null; // relasi: belongsTo(User::class, 'created_by')
-        if (!$creator) {
-            abort(422, 'PTK tidak memiliki data pembuat (creator).');
+        $ptk->approver_id = auth()->id();
+        $ptk->approved_at = now();
+        // Biasanya sudah 'Completed' saat masuk antrian; biarkan atau set ulang:
+        $ptk->status = 'Completed';
+
+        // Opsional: cap juga director_id jika yang approve adalah director
+        if (auth()->user()?->hasRole('director')) {
+            $ptk->director_id = auth()->id();
         }
 
-        // Tentukan role approver dari mapping role pertama si creator
-        $map = config('ptk_roles.approval_map', []);
-        $creatorPrimaryRole = $creator->getRoleNames()->first(); // contoh: 'admin_qc'
-        $approverRole = $map[$creatorPrimaryRole] ?? ($map['*'] ?? 'director');
+        $ptk->save();
 
-        // Hanya user dengan role approver yang boleh approve
-        $user = $request->user();
-        if (!$user->hasRole($approverRole)) {
-            abort(403, "Aksi ditolak: approver untuk PTK ini harus role '{$approverRole}'.");
-        }
-
-        DB::transaction(function () use ($ptk, $user) {
-            // Isi nomor hanya jika kosong (format handled by PTKNumberingService)
-            if (empty($ptk->number)) {
-                /** @var PTKNumberingService $svc */
-                $svc = app(PTKNumberingService::class);
-                // Contoh hasil: PTK/{DEPT}/YYYY/MM/NNN
-                $ptk->number = $svc->nextNumber($ptk->department_id, now());
-            }
-
-            // Set data approval final
-            $ptk->approver_id = auth()->id();
-            $ptk->approved_at = now();
-            $ptk->status      = 'Completed';
-
-            // Jika yang approve adalah director, simpan juga director_id (opsional)
-            if ($user->hasRole('director')) {
-                $ptk->director_id = auth()->id();
-            }
-
-            $ptk->save();
-        });
-
-        return back()->with('ok', 'PTK disetujui & dinomori.');
+        return back()->with('ok', 'PTK sudah di-approve.');
     }
 
     /**
-     * Reject / kembalikan ke Not Started (reset approval).
-     * Catatan: kolom number TIDAK diubah agar histori nomor tetap terjaga.
+     * Reject PTK:
+     * - Wajib lolos policy 'reject'
+     * - Kembalikan status ke In Progress, kosongkan approved_at
+     * - Nomor dibiarkan (tetap kosong jika belum dinomori)
      */
-    public function reject(Request $request, PTK $ptk)
+    public function reject(PTK $ptk): RedirectResponse
     {
-        $request->validate(['reason' => 'nullable|string|max:500']);
+        $this->authorize('reject', $ptk);
 
-        $ptk->update([
-            'approver_id' => null,
-            'director_id' => null,
-            'approved_at' => null,
-            'status'      => 'Not Started',
-        ]);
+        $ptk->status       = 'In Progress';
+        $ptk->approved_at  = null;
+        $ptk->approver_id  = null;
+        $ptk->director_id  = null;
+        // $ptk->number tetap seperti adanya (biasanya masih kosong)
+        $ptk->save();
 
-        // TODO: simpan $request->reason ke kolom/riwayat jika diperlukan.
-
-        return back()->with('ok', 'PTK dikembalikan untuk revisi.');
+        return back()->with('ok', 'PTK dikembalikan ke In Progress.');
     }
 }

@@ -5,29 +5,40 @@
       <h1 class="text-xl font-semibold">PTK {{ $ptk->number ?? '-' }}</h1>
 
       <div class="flex flex-wrap gap-2">
-        {{-- Tombol Submit PTK (role admin dept & belum Completed) --}}
-        @role('admin_qc|admin_hr|admin_k3')
-          @if(in_array($ptk->status, ['In Progress','Not Started']))
-            <form method="POST" action="{{ route('ptk.submit', $ptk) }}">
+        {{-- ✅ Tombol Submit PTK (hanya admin dept tertentu & belum Completed) --}}
+        @hasanyrole('admin_qc_flange|admin_qc_fitting|admin_hr|admin_k3')
+          @if($ptk->status !== 'Completed')
+            <form method="POST" action="{{ route('ptk.submit', $ptk) }}" class="inline">
               @csrf
-              <button class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
+              <button class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">
                 Submit PTK
               </button>
             </form>
           @endif
-        @endrole
+        @endhasanyrole
 
-        @can('ptk.update')
-          <a href="{{ route('ptk.edit',$ptk) }}" class="px-3 py-2 bg-blue-600 text-white rounded-lg">Edit</a>
+        {{-- Edit PTK --}}
+        @can('update', $ptk)
+          <a href="{{ route('ptk.edit', $ptk) }}"
+             class="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+            Edit
+          </a>
         @endcan
 
-        <a href="{{ route('exports.pdf',$ptk->id) }}" class="px-3 py-2 bg-gray-800 text-white rounded-lg">Download PDF</a>
+        {{-- Download PDF --}}
+        <a href="{{ route('exports.pdf', $ptk->id) }}"
+           class="px-3 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900">
+          Download PDF
+        </a>
 
-        @can('ptk.update')
-          <form method="POST" action="{{ route('ptk.destroy',$ptk) }}"
-                onsubmit="return confirm('Yakin hapus PTK ini?')">
+        {{-- Delete PTK --}}
+        @can('delete', $ptk)
+          <form method="POST" action="{{ route('ptk.destroy', $ptk) }}"
+                onsubmit="return confirm('Yakin hapus PTK ini?')" class="inline">
             @csrf @method('DELETE')
-            <button class="px-3 py-2 bg-rose-600 text-white rounded-lg">Delete</button>
+            <button class="px-3 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700">
+              Delete
+            </button>
           </form>
         @endcan
       </div>
@@ -35,7 +46,7 @@
 
     {{-- Meta ringkas --}}
     @php
-      $badge = match($ptk->status){
+      $badge = match($ptk->status) {
         'Completed'   => 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-100',
         'In Progress' => 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-100',
         default       => 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200',
@@ -49,13 +60,17 @@
 
         <div class="text-xs text-gray-500">Status</div>
         <div class="mb-3">
-          <span class="px-2 py-1 rounded text-xs font-medium {{ $badge }}">{{ $ptk->status }}</span>
+          <span class="px-2 py-1 rounded text-xs font-medium {{ $badge }}">
+            {{ $ptk->status }}
+          </span>
         </div>
 
         <div class="text-xs text-gray-500">Kategori / Departemen</div>
         <div class="mb-3">
           {{ $ptk->category->name ?? '-' }}
-          @if($ptk->subcategory) <span class="text-gray-400">/</span> {{ $ptk->subcategory->name }} @endif
+          @if($ptk->subcategory)
+            <span class="text-gray-400">/</span> {{ $ptk->subcategory->name }}
+          @endif
           <span class="text-gray-400"> • </span> {{ $ptk->department->name ?? '-' }}
         </div>
 
@@ -66,14 +81,14 @@
         <div>{{ optional($ptk->due_date)->format('Y-m-d') }} / {{ optional($ptk->approved_at)->format('Y-m-d') ?? '-' }}</div>
       </div>
 
-      {{-- Dokumen ringkasan deskripsi lama (opsional) --}}
+      {{-- Deskripsi singkat --}}
       <div class="bg-white dark:bg-gray-800 rounded-xl p-5 shadow">
         <div class="text-xs text-gray-500">Deskripsi singkat</div>
         <div class="prose dark:prose-invert max-w-none">{!! nl2br(e($ptk->description ?? '—')) !!}</div>
       </div>
     </div>
 
-    {{-- SECTION UTAMA (vertikal seperti PDF) --}}
+    {{-- SECTION UTAMA --}}
     <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow space-y-6">
       <div>
         <h2 class="font-semibold mb-2">1. Deskripsi Ketidaksesuaian</h2>
@@ -96,7 +111,7 @@
       </div>
     </div>
 
-    {{-- LAMPIRAN (galeri + modal preview) --}}
+    {{-- LAMPIRAN --}}
     <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow">
       <h2 class="font-semibold mb-3">Lampiran</h2>
 
@@ -119,7 +134,9 @@
               @else
                 <a href="{{ $url }}" target="_blank"
                    class="flex items-center justify-center w-full aspect-[4/3] rounded-lg ring-1 ring-gray-200 dark:ring-gray-700 bg-gray-50 dark:bg-gray-900">
-                  <span class="text-xs text-gray-600 dark:text-gray-300">{{ strtoupper(pathinfo($att->original_name, PATHINFO_EXTENSION)) }}</span>
+                  <span class="text-xs text-gray-600 dark:text-gray-300">
+                    {{ strtoupper(pathinfo($att->original_name, PATHINFO_EXTENSION)) }}
+                  </span>
                 </a>
               @endif
               <div class="mt-1 text-xs truncate" title="{{ $att->original_name }}">{{ $att->original_name }}</div>

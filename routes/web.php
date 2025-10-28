@@ -97,17 +97,20 @@ Route::middleware('auth')->group(function () {
     // ======================
     // Exports (+ Audit)
     // ======================
-    Route::prefix('exports')->name('exports.')->group(function () {
-        // Preview single PTK (🔹 route baru)
-        Route::get('preview/{ptk}', [ExportController::class, 'preview'])->name('preview');
+    // PREVIEW (inline stream)
+    Route::get('exports/preview/{ptk}', [ExportController::class, 'preview'])
+        ->name('exports.preview');
 
-        // Form & laporan rentang tanggal
+    // DOWNLOAD (PDF)
+    Route::get('exports/pdf/{ptk}', [ExportController::class, 'pdf'])
+        ->name('exports.pdf');
+
+    // Laporan rentang tanggal
+    Route::prefix('exports')->name('exports.')->group(function () {
         Route::get('range',  [ExportController::class, 'rangeForm'])->name('range.form');
         Route::post('range', [ExportController::class, 'rangeReport'])->name('range.report');
 
-        // File exports
         Route::get('excel',        [ExportController::class, 'excel'])->name('excel');
-        Route::get('pdf/{ptk}',    [ExportController::class, 'pdf'])->name('pdf');
         Route::post('range/excel', [ExportController::class, 'rangeExcel'])->name('range.excel');
         Route::post('range/pdf',   [ExportController::class, 'rangePdf'])->name('range.pdf');
 
@@ -121,7 +124,6 @@ Route::middleware('auth')->group(function () {
     |--------------------------------------------------------------------------
     | 📷 Caption Attachment (inline edit)
     |--------------------------------------------------------------------------
-    | Form mini di ptk/show.blade.php untuk menyimpan keterangan lampiran.
     */
     Route::patch('attachments/{attachment}/caption', function (Request $r, Attachment $attachment) {
         // pastikan user boleh update PTK terkait
@@ -140,7 +142,6 @@ require __DIR__ . '/auth.php';
 |--------------------------------------------------------------------------
 | 🧩 Verifikasi Dokumen (Publik)
 |--------------------------------------------------------------------------
-| Digunakan oleh QR di PDF untuk memverifikasi keaslian dokumen.
 */
 Route::get('/verify/{ptk}/{hash}', function (PTK $ptk, string $hash) {
     $expected = hash('sha256', json_encode([

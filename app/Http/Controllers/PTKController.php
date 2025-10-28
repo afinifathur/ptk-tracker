@@ -1,5 +1,6 @@
 <?php
 // app/Http/Controllers/PTKController.php
+declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
@@ -7,6 +8,9 @@ use App\Imports\PTKImport;
 use App\Models\{PTK, Department, Category, User};
 use App\Services\AttachmentService;
 use App\Support\DeptScope;
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -20,8 +24,9 @@ class PTKController extends Controller
 
     /**
      * Roles admin per-departemen yang dipaksa mengikuti department_id user.
+     * Juga dipakai untuk membatasi kandidat PIC.
      */
-    private array $deptAdminRoles = ['admin_qc', 'admin_hr', 'admin_k3'];
+    private array $deptAdminRoles = ['admin_qc_flange', 'admin_qc_fitting', 'admin_hr', 'admin_k3'];
 
     public function __construct(
         private readonly AttachmentService $attachments
@@ -30,9 +35,9 @@ class PTKController extends Controller
     }
 
     # =========================================================
-    # INDEX — daftar PTK (sudah pakai visibleTo)
+    # INDEX — daftar PTK (pakai visibleTo)
     # =========================================================
-    public function index(Request $request)
+    public function index(Request $request): View
     {
         $q = PTK::visibleTo($request->user())
             ->with([
@@ -61,19 +66,19 @@ class PTKController extends Controller
         return view('ptk.index', compact('ptks'));
     }
 
-    public function create(Request $request)
+    public function create(Request $request): View
     {
         return view('ptk.create', [
-            'departments' => $this->departmentsFor($request),
-            'categories'  => Category::all(),
-            'users'       => User::select('id', 'name')->get(),
+            'departments'   => $this->departmentsFor($request),
+            'categories'    => Category::all(),
+            'picCandidates' => $this->picCandidatesFor($request),
         ]);
     }
 
     # =========================================================
     # STORE
     # =========================================================
-    public function store(Request $request)
+    public function store(Request $request): RedirectResponse
     {
         $data = $this->validatePayload($request);
 
@@ -91,8 +96,10 @@ class PTKController extends Controller
         return redirect()->route('ptk.show', $ptk)->with('ok', 'PTK dibuat.');
     }
 
-    public function show(PTK $ptk)
+    public function show(PTK $ptk): View
     {
+        $this->authorize('view', $ptk);
+
         $ptk->load([
             'pic:id,name',
             'department:id,name',
@@ -105,20 +112,20 @@ class PTKController extends Controller
         return view('ptk.show', compact('ptk'));
     }
 
-    public function edit(Request $request, PTK $ptk)
+    public function edit(Request $request, PTK $ptk): View
     {
         return view('ptk.edit', [
-            'ptk'         => $ptk,
-            'departments' => $this->departmentsFor($request),
-            'categories'  => Category::all(),
-            'users'       => User::select('id', 'name')->get(),
+            'ptk'           => $ptk,
+            'departments'   => $this->departmentsFor($request),
+            'categories'    => Category::all(),
+            'picCandidates' => $this->picCandidatesFor($request),
         ]);
     }
 
     # =========================================================
     # UPDATE
     # =========================================================
-    public function update(Request $request, PTK $ptk)
+    public function update(Request $request, PTK $ptk): RedirectResponse
     {
         $data = $this->validatePayload($request);
 
@@ -126,7 +133,7 @@ class PTKController extends Controller
             $data['department_id'] = $request->user()->department_id;
         }
 
-        // Opsi perapihan status otomatis
+        // Auto-move ke In Progress saat evaluation terisi dan status masih Not Started
         if ($request->filled('evaluation') && $ptk->status === 'Not Started') {
             $data['status'] = 'In Progress';
         }
@@ -141,7 +148,7 @@ class PTKController extends Controller
     # =========================================================
     # DESTROY (soft delete)
     # =========================================================
-    public function destroy(PTK $ptk)
+    public function destroy(PTK $ptk): RedirectResponse
     {
         try {
             $ptk->delete();
@@ -155,9 +162,9 @@ class PTKController extends Controller
     }
 
     # =========================================================
-    # KANBAN — batasi 30 & urutan (sudah pakai visibleTo)
+    # KANBAN — batasi 30 & urutan (pakai visibleTo)
     # =========================================================
-    public function kanban()
+    public function kanban(): View
     {
         $user = auth()->user();
 
@@ -185,7 +192,7 @@ class PTKController extends Controller
         return view('ptk.kanban', compact('notStarted','inProgress','completed'));
     }
 
-    public function quickStatus(Request $request, PTK $ptk)
+    public function quickStatus(Request $request, PTK $ptk): JsonResponse
     {
         $this->authorize('update', $ptk);
 
@@ -199,9 +206,9 @@ class PTKController extends Controller
     }
 
     # =========================================================
-    # QUEUE — PTK Completed tanpa nomor (sudah pakai visibleTo)
+    # QUEUE — PTK Completed tanpa nomor (pakai visibleTo)
     # =========================================================
-    public function queue(Request $request)
+    public function queue(Request $request): View
     {
         $q = PTK::visibleTo($request->user())
             ->with(['pic:id,name', 'department:id,name'])
@@ -215,9 +222,9 @@ class PTKController extends Controller
     }
 
     # =========================================================
-    # RECYCLE BIN & RESTORE/FORCE DELETE (sudah pakai visibleTo)
+    # RECYCLE BIN & RESTORE/FORCE DELETE (pakai visibleTo)
     # =========================================================
-    public function recycle(Request $request)
+    public function recycle(Request $request): View
     {
         $q = PTK::onlyTrashed()
             ->visibleTo($request->user())
@@ -228,7 +235,7 @@ class PTKController extends Controller
         return view('ptk.recycle', compact('items'));
     }
 
-    public function restore(Request $request, $id)
+    public function restore(Request $request, string $id): RedirectResponse
     {
         $ptk = PTK::withTrashed()->findOrFail($id);
         $this->authorize('delete', $ptk);
@@ -238,7 +245,7 @@ class PTKController extends Controller
         return back()->with('ok', 'PTK dipulihkan.');
     }
 
-    public function forceDelete(Request $request, $id)
+    public function forceDelete(Request $request, string $id): RedirectResponse
     {
         $ptk = PTK::withTrashed()->with('attachments')->findOrFail($id);
         $this->authorize('delete', $ptk);
@@ -258,7 +265,7 @@ class PTKController extends Controller
     # =========================================================
     # SUBMIT — ubah status ke Completed jika evaluasi sudah ada
     # =========================================================
-    public function submit(PTK $ptk)
+    public function submit(PTK $ptk): RedirectResponse
     {
         $this->authorize('update', $ptk);
 
@@ -276,7 +283,7 @@ class PTKController extends Controller
     # =========================================================
     # IMPORT
     # =========================================================
-    public function import(Request $request)
+    public function import(Request $request): RedirectResponse
     {
         $request->validate([
             'file' => ['required', 'file', 'mimes:xlsx,csv,txt', 'max:10240'],
@@ -290,14 +297,32 @@ class PTKController extends Controller
     # =========================================================
     # Helpers (private)
     # =========================================================
+    /** Dropdown departemen di form (menghormati DeptScope). */
     private function departmentsFor(Request $request)
     {
-        // Tetap gunakan DeptScope untuk dropdown departemen di form
         $allowed = DeptScope::allowedDeptIds($request->user());
 
         return empty($allowed)
             ? Department::all()
             : Department::whereIn('id', $allowed)->get();
+    }
+
+    /**
+     * Kandidat PIC untuk form create/edit.
+     * Jika DeptScope membatasi, hanya tampilkan user pada departemen yang diizinkan.
+     */
+    private function picCandidatesFor(Request $request)
+    {
+        $builder = User::query()
+            ->orderBy('name')
+            ->select(['id', 'name']);
+
+        $allowedDeptIds = DeptScope::allowedDeptIds($request->user());
+        if (!empty($allowedDeptIds)) {
+            $builder->whereIn('department_id', $allowedDeptIds);
+        }
+
+        return $builder->get();
     }
 
     private function validatePayload(Request $request): array
@@ -317,11 +342,7 @@ class PTKController extends Controller
         return $request->validate($rules);
     }
 
-    /**
-     * Aturan validasi bersama untuk store/update.
-     *
-     * @return array<string, mixed>
-     */
+    /** Aturan validasi bersama untuk store/update. */
     private function rules(): array
     {
         return [

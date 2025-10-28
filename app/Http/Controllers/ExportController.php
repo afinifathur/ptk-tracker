@@ -45,7 +45,6 @@ class ExportController extends Controller
 
     private function rangeMeta(Request $r): array
     {
-        // buat label ringkasan untuk ditampilkan di PDF/Excel header
         return [
             'start'             => $r->start,
             'end'               => $r->end,
@@ -59,7 +58,6 @@ class ExportController extends Controller
     /** 🔹 Export SELURUH PTK yang terlihat oleh user ke Excel (bukan range) */
     public function excel(Request $request)
     {
-        // Pastikan filter visibilitas dipakai
         $items = PTK::visibleTo($request->user())
             ->with(['category','subcategory','department','pic'])
             ->orderBy('created_at', 'desc')
@@ -94,17 +92,19 @@ class ExportController extends Controller
         }, 'ptk.xlsx');
     }
 
-    /** 🔹 Preview satu PTK ke PDF (inline) — cek visibilitas via scope */
-    public function preview(Request $request, $ptkId)
+    /** 🔹 PREVIEW satu PTK (inline stream) */
+    public function preview(PTK $ptk)
     {
-        $ptk = PTK::visibleTo($request->user())
-            ->with([
-                'attachments', 'pic', 'department', 'category', 'subcategory',
-                'creator', 'approver', 'director',
-            ])->findOrFail($ptkId);
+        // izin sama seperti view/download
+        $this->authorize('download', $ptk);
 
-        $this->authorize('view', $ptk);
+        // muat relasi yang dibutuhkan PDF
+        $ptk->load([
+            'attachments', 'pic', 'department', 'category', 'subcategory',
+            'creator', 'approver', 'director',
+        ]);
 
+        // hash dokumen untuk QR verifikasi
         $docHash = hash('sha256', json_encode([
             'id'          => $ptk->id,
             'number'      => $ptk->number,
@@ -122,11 +122,13 @@ class ExportController extends Controller
             $qrBase64 = null;
         }
 
+        // logo & tanda tangan (opsional)
         $companyLogoBase64 = $this->b64(public_path('brand/logo.png'));
         $signAdmin    = $this->b64(public_path('brand/signatures/admin.png'));
         $signApprover = $this->b64(public_path('brand/signatures/approver.png'));
         $signDirector = $this->b64(public_path('brand/signatures/director.png'));
 
+        // embed gambar lampiran (maks 6)
         $embeds = [];
         foreach ($ptk->attachments->take(6) as $att) {
             $mime = strtolower($att->mime ?? '');
@@ -153,24 +155,14 @@ class ExportController extends Controller
         $pdf->set_option('isRemoteEnabled', true);
         $pdf->set_option('defaultFont', 'DejaVu Sans');
 
-        session()->put("previewed_ptk.{$ptk->id}", now()->toDateTimeString());
-
-        $safe = $ptk->number ? preg_replace('/[\\\\\/]+/','-', $ptk->number) : "PTK-{$ptk->id}";
-        return $pdf->stream("{$safe}.pdf", ['Attachment' => false]);
+        $name = preg_replace('/[\/\\\\]+/', '-', $ptk->number ?: 'PTK-'.$ptk->id) . '.pdf';
+        return $pdf->stream($name); // inline / tab baru
     }
 
-    /** 🔹 Export satu PTK ke PDF (download) — validasi visibilitas via scope */
-    public function pdf(Request $request, PTK $ptk)
+    /** 🔹 DOWNLOAD satu PTK (PDF) */
+    public function pdf(PTK $ptk)
     {
-        $this->authorize('view', $ptk);
-
-        // Pastikan yang di-bind memang terlihat oleh user
-        $visible = PTK::visibleTo($request->user())
-            ->whereKey($ptk->getKey())
-            ->exists();
-        if (!$visible) {
-            abort(403);
-        }
+        $this->authorize('download', $ptk);
 
         $ptk->load([
             'attachments', 'pic', 'department', 'category', 'subcategory',
@@ -225,11 +217,8 @@ class ExportController extends Controller
         $pdf->set_option('isRemoteEnabled', true);
         $pdf->set_option('defaultFont', 'DejaVu Sans');
 
-        $base = $ptk->number ?: Str::slug($ptk->title ?: '') ?: 'laporan-ptk';
-        $safe = preg_replace('/[\\\\\/]+/', '-', $base);
-        $fname = "ptk-{$safe}.pdf";
-
-        return $pdf->download($fname);
+        $name = preg_replace('/[\/\\\\]+/', '-', $ptk->number ?: 'PTK-'.$ptk->id) . '.pdf';
+        return $pdf->download($name);
     }
 
     /** Laporan Periode (form) */
@@ -254,7 +243,6 @@ class ExportController extends Controller
             'categories'    => Category::all(),
             'subcategories' => Subcategory::all(),
             'departments'   => Department::all(),
-            // re-populate form
             'selected'      => [
                 'category_id'    => $r->category_id,
                 'subcategory_id' => $r->subcategory_id,
@@ -287,7 +275,6 @@ class ExportController extends Controller
         $items = $this->buildRangeQuery($r)->orderBy('created_at','desc')->get();
         $meta  = $this->rangeMeta($r);
 
-        // Versi cepat tanpa export class, sumber data tunggal dari buildRangeQuery
         return Excel::download(new class($items, $meta) implements
             \Maatwebsite\Excel\Concerns\FromArray,
             \Maatwebsite\Excel\Concerns\WithHeadings,

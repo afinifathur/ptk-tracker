@@ -21,7 +21,6 @@
       @error('status') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
-    {{-- Kategori --}}
     <label for="cat">Kategori
       <select name="category_id" id="cat" class="border p-2 rounded w-full" required>
         @foreach($categories as $c)
@@ -31,7 +30,6 @@
       @error('category_id') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
-    {{-- Subkategori (dependent on Kategori) --}}
     <label for="subcat">Subkategori
       <select name="subcategory_id" id="subcat" class="border p-2 rounded w-full">
         <option value="">-- pilih subkategori --</option>
@@ -48,9 +46,10 @@
       @error('department_id') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
+    {{-- PIC: tetap selectable untuk semua role --}}
     <label for="pic_user_id">PIC
       <select id="pic_user_id" name="pic_user_id" class="border p-2 rounded w-full" required>
-        @foreach($users as $u)
+        @foreach(($picCandidates ?? $users) as $u)
           <option value="{{ $u->id }}" @selected(old('pic_user_id', $ptk->pic_user_id) == $u->id)>{{ $u->name }}</option>
         @endforeach
       </select>
@@ -63,13 +62,12 @@
       @error('due_date') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
-    {{-- Deskripsi umum --}}
     <label for="description" class="md:col-span-2">Deskripsi
       <textarea id="description" name="description" rows="6" class="border p-2 rounded w-full" required>{{ old('description', $ptk->description) }}</textarea>
       @error('description') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
-    {{-- 🔽 4 bagian tambahan --}}
+    {{-- 4 bagian tambahan --}}
     <label class="md:col-span-2">Deskripsi Ketidaksesuaian
       <textarea name="description_nc" rows="5" class="border p-2 rounded w-full">{{ old('description_nc', $ptk->description_nc ?? '') }}</textarea>
       @error('description_nc') <small class="text-red-600">{{ $message }}</small> @enderror
@@ -89,7 +87,6 @@
       <textarea name="corrective_action" rows="5" class="border p-2 rounded w-full">{{ old('corrective_action', $ptk->corrective_action ?? '') }}</textarea>
       @error('corrective_action') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
-    {{-- 🔼 end 4 bagian --}}
 
     <label for="attachments" class="md:col-span-2">Lampiran (tambah)
       <input id="attachments" type="file" name="attachments[]" multiple accept=".jpg,.jpeg,.png,.pdf" class="border p-2 rounded w-full">
@@ -109,10 +106,7 @@
       sel.innerHTML = '<option value="">-- pilih subkategori --</option>';
       sel.disabled = true;
 
-      if(!catId){
-        sel.disabled = false;
-        return;
-      }
+      if(!catId){ sel.disabled = false; return; }
 
       try{
         const res = await fetch(`{{ route('api.subcategories') }}?category_id=${encodeURIComponent(catId)}`);
@@ -123,16 +117,11 @@
           const opt = document.createElement('option');
           opt.value = row.id;
           opt.textContent = row.name;
-          if (String(selectedId) === String(row.id)) {
-            opt.selected = true;
-          }
+          if (String(selectedId) === String(row.id)) opt.selected = true;
           sel.appendChild(opt);
         });
-      }catch(e){
-        console.error(e);
-      }finally{
-        sel.disabled = false;
-      }
+      }catch(e){ console.error(e); }
+      finally{ sel.disabled = false; }
     }
 
     const catSel = document.getElementById('cat');

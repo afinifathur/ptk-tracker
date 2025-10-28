@@ -1,7 +1,10 @@
 <?php
+declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Models\PTK;
+use App\Policies\PTKPolicy;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 
 class AuthServiceProvider extends ServiceProvider
@@ -12,7 +15,7 @@ class AuthServiceProvider extends ServiceProvider
      * @var array<class-string, class-string>
      */
     protected $policies = [
-        \App\Models\PTK::class => \App\Policies\PTKPolicy::class,
+        PTK::class => PTKPolicy::class, // pastikan policy terdaftar
     ];
 
     /**
