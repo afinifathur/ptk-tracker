@@ -26,16 +26,17 @@ class PTK extends Model implements AuditableContract
         'number',
         'title',
         'description',
-        'description_nc',
+        'desc_nc',              // diubah dari description_nc
         'evaluation',
-        'correction_action',
-        'corrective_action',
+        'action_correction',    // diubah dari correction_action
+        'action_corrective',    // diubah dari corrective_action
         'category_id',
         'subcategory_id',
         'department_id',
         'pic_user_id',
         'status',
         'due_date',
+        'form_date',            // kolom baru ditambahkan
         'approved_at',
         'approver_id',
         'director_id',
@@ -47,6 +48,7 @@ class PTK extends Model implements AuditableContract
      */
     protected $casts = [
         'due_date'    => 'datetime',
+        'form_date'   => 'datetime', // tambahkan agar otomatis jadi instance Carbon
         'approved_at' => 'datetime',
     ];
 
@@ -57,16 +59,17 @@ class PTK extends Model implements AuditableContract
         'number',
         'title',
         'description',
-        'description_nc',
+        'desc_nc',
         'evaluation',
-        'correction_action',
-        'corrective_action',
+        'action_correction',
+        'action_corrective',
         'category_id',
         'subcategory_id',
         'department_id',
         'pic_user_id',
         'status',
         'due_date',
+        'form_date',
         'approved_at',
         'approver_id',
         'director_id',

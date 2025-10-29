@@ -78,7 +78,28 @@
         <div class="mb-3">{{ $ptk->pic->name ?? '-' }}</div>
 
         <div class="text-xs text-gray-500">Due / Approved</div>
-        <div>{{ optional($ptk->due_date)->format('Y-m-d') }} / {{ optional($ptk->approved_at)->format('Y-m-d') ?? '-' }}</div>
+        <div class="mb-3">
+          {{ optional($ptk->due_date)->format('Y-m-d') ?? '-' }} /
+          {{ optional($ptk->approved_at)->format('Y-m-d') ?? '-' }}
+        </div>
+
+        {{-- >>> Dua tanggal: Form & Input --}}
+        <div class="mt-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <span class="text-gray-500">Tanggal Form:</span>
+              <span class="font-medium">
+                {{ optional($ptk->form_date)->format('d M Y') }}
+              </span>
+            </div>
+            <div>
+              <span class="text-gray-500">Tanggal Input:</span>
+              <span class="font-medium">
+                {{ $ptk->created_at?->timezone(config('app.timezone'))->format('d M Y H:i') }}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {{-- Deskripsi singkat --}}
@@ -92,7 +113,7 @@
     <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow space-y-6">
       <div>
         <h2 class="font-semibold mb-2">1. Deskripsi Ketidaksesuaian</h2>
-        <div class="prose dark:prose-invert max-w-none">{!! nl2br(e($ptk->description_nc ?? '—')) !!}</div>
+        <div class="prose dark:prose-invert max-w-none">{!! nl2br(e($ptk->desc_nc ?? '—')) !!}</div>
       </div>
 
       <div>
@@ -102,12 +123,12 @@
 
       <div>
         <h2 class="font-semibold mb-2">3a. Tindakan Koreksi</h2>
-        <div class="prose dark:prose-invert max-w-none">{!! nl2br(e($ptk->correction_action ?? '—')) !!}</div>
+        <div class="prose dark:prose-invert max-w-none">{!! nl2br(e($ptk->action_correction ?? '—')) !!}</div>
       </div>
 
       <div>
         <h2 class="font-semibold mb-2">3b. Tindakan Korektif</h2>
-        <div class="prose dark:prose-invert max-w-none">{!! nl2br(e($ptk->corrective_action ?? '—')) !!}</div>
+        <div class="prose dark:prose-invert max-w-none">{!! nl2br(e($ptk->action_corrective ?? '—')) !!}</div>
       </div>
     </div>
 
@@ -119,8 +140,9 @@
         <ul class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
           @foreach($ptk->attachments as $att)
             @php
-              $url = \Illuminate\Support\Facades\Storage::url($att->path);
-              $isImg = str_starts_with($att->mime, 'image/');
+              $url   = \Illuminate\Support\Facades\Storage::url($att->path);
+              $mime  = strtolower($att->mime ?? '');
+              $isImg = str_starts_with($mime, 'image/');
             @endphp
 
             <li class="group">

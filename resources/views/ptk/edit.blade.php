@@ -13,7 +13,7 @@
     </label>
 
     <label for="status">Status
-      <select id="status" name="status" class="border p-2 rounded w-full" required>
+      <select id="status" name="status" class="border p-2 rounded w-full">
         @foreach(['Not Started','In Progress','Completed'] as $s)
           <option value="{{ $s }}" @selected(old('status', $ptk->status) === $s)>{{ $s }}</option>
         @endforeach
@@ -49,7 +49,7 @@
     {{-- PIC: tetap selectable untuk semua role --}}
     <label for="pic_user_id">PIC
       <select id="pic_user_id" name="pic_user_id" class="border p-2 rounded w-full" required>
-        @foreach(($picCandidates ?? $users) as $u)
+        @foreach($picCandidates as $u)
           <option value="{{ $u->id }}" @selected(old('pic_user_id', $ptk->pic_user_id) == $u->id)>{{ $u->name }}</option>
         @endforeach
       </select>
@@ -57,20 +57,29 @@
     </label>
 
     <label for="due_date">Due date
-      <input id="due_date" type="date" name="due_date" class="border p-2 rounded w-full" required
+      <input id="due_date" type="date" name="due_date" class="border p-2 rounded w-full"
              value="{{ old('due_date', optional($ptk->due_date)->format('Y-m-d')) }}">
       @error('due_date') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
+    {{-- Tanggal Form (tanggal di kertas) --}}
+    <label for="form_date" class="text-sm font-medium md:col-span-2">Tanggal Form (Tanggal PTK Asli)</label>
+    <div class="md:col-span-2">
+      <input id="form_date" type="date" name="form_date"
+             value="{{ old('form_date', optional($ptk->form_date)->format('Y-m-d')) }}"
+             class="border p-2 rounded w-full" required>
+      @error('form_date') <small class="text-red-600">{{ $message }}</small> @enderror
+    </div>
+
     <label for="description" class="md:col-span-2">Deskripsi
-      <textarea id="description" name="description" rows="6" class="border p-2 rounded w-full" required>{{ old('description', $ptk->description) }}</textarea>
+      <textarea id="description" name="description" rows="6" class="border p-2 rounded w-full">{{ old('description', $ptk->description) }}</textarea>
       @error('description') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
     {{-- 4 bagian tambahan --}}
     <label class="md:col-span-2">Deskripsi Ketidaksesuaian
-      <textarea name="description_nc" rows="5" class="border p-2 rounded w-full">{{ old('description_nc', $ptk->description_nc ?? '') }}</textarea>
-      @error('description_nc') <small class="text-red-600">{{ $message }}</small> @enderror
+      <textarea name="desc_nc" rows="5" class="border p-2 rounded w-full">{{ old('desc_nc', $ptk->desc_nc ?? '') }}</textarea>
+      @error('desc_nc') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
     <label class="md:col-span-2">Evaluasi Masalah
@@ -79,13 +88,13 @@
     </label>
 
     <label class="md:col-span-2">3a. Koreksi (perbaikan masalah)
-      <textarea name="correction_action" rows="5" class="border p-2 rounded w-full">{{ old('correction_action', $ptk->correction_action ?? '') }}</textarea>
-      @error('correction_action') <small class="text-red-600">{{ $message }}</small> @enderror
+      <textarea name="action_correction" rows="5" class="border p-2 rounded w-full">{{ old('action_correction', $ptk->action_correction ?? '') }}</textarea>
+      @error('action_correction') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
     <label class="md:col-span-2">3b. Tindakan Korektif (akar masalah)
-      <textarea name="corrective_action" rows="5" class="border p-2 rounded w-full">{{ old('corrective_action', $ptk->corrective_action ?? '') }}</textarea>
-      @error('corrective_action') <small class="text-red-600">{{ $message }}</small> @enderror
+      <textarea name="action_corrective" rows="5" class="border p-2 rounded w-full">{{ old('action_corrective', $ptk->action_corrective ?? '') }}</textarea>
+      @error('action_corrective') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
     <label for="attachments" class="md:col-span-2">Lampiran (tambah)

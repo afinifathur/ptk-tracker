@@ -36,7 +36,7 @@
     {{-- Departemen: hidden utk admin dept, dropdown utk role lain --}}
     @php
       $authUser      = auth()->user();
-      $isDeptAdmin   = $authUser->hasAnyRole('admin_qc','admin_hr','admin_k3');
+      $isDeptAdmin   = $authUser->hasAnyRole('admin_qc_flange','admin_qc_fitting','admin_hr','admin_k3');
       $deptOldOrUser = old('department_id', $authUser->department_id);
     @endphp
 
@@ -67,7 +67,7 @@
     <label for="pic_user_id">PIC
       <select id="pic_user_id" name="pic_user_id" class="border p-2 rounded w-full" required>
         <option value="">-- pilih --</option>
-        @foreach(($picCandidates ?? $users) as $uopt)
+        @foreach($picCandidates as $uopt)
           <option value="{{ $uopt->id }}" @selected(old('pic_user_id') == $uopt->id)>{{ $uopt->name }}</option>
         @endforeach
       </select>
@@ -79,6 +79,14 @@
       @error('due_date') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
+    {{-- Tanggal Form (tanggal di kertas) --}}
+    <label for="form_date">Tanggal Form (Tanggal PTK Asli)
+      <input id="form_date" type="date" name="form_date"
+             value="{{ old('form_date', now()->toDateString()) }}"
+             class="border p-2 rounded w-full" required>
+      @error('form_date') <small class="text-red-600">{{ $message }}</small> @enderror
+    </label>
+
     {{-- Deskripsi umum (opsional) --}}
     <label for="description" class="md:col-span-2">Deskripsi
       <textarea id="description" name="description" rows="6" class="border p-2 rounded w-full">{{ old('description') }}</textarea>
@@ -87,8 +95,8 @@
 
     {{-- 4 bagian tambahan --}}
     <label class="md:col-span-2">Deskripsi Ketidaksesuaian
-      <textarea name="description_nc" rows="5" class="border p-2 rounded w-full">{{ old('description_nc') }}</textarea>
-      @error('description_nc') <small class="text-red-600">{{ $message }}</small> @enderror
+      <textarea name="desc_nc" rows="5" class="border p-2 rounded w-full">{{ old('desc_nc') }}</textarea>
+      @error('desc_nc') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
     <label class="md:col-span-2">Evaluasi Masalah
@@ -97,13 +105,13 @@
     </label>
 
     <label class="md:col-span-2">3a. Koreksi (perbaikan masalah)
-      <textarea name="correction_action" rows="5" class="border p-2 rounded w-full">{{ old('correction_action') }}</textarea>
-      @error('correction_action') <small class="text-red-600">{{ $message }}</small> @enderror
+      <textarea name="action_correction" rows="5" class="border p-2 rounded w-full">{{ old('action_correction') }}</textarea>
+      @error('action_correction') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
     <label class="md:col-span-2">3b. Tindakan Korektif (akar masalah)
-      <textarea name="corrective_action" rows="5" class="border p-2 rounded w-full">{{ old('corrective_action') }}</textarea>
-      @error('corrective_action') <small class="text-red-600">{{ $message }}</small> @enderror
+      <textarea name="action_corrective" rows="5" class="border p-2 rounded w-full">{{ old('action_corrective') }}</textarea>
+      @error('action_corrective') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
     <label for="attachments" class="md:col-span-2">Lampiran (multiple)

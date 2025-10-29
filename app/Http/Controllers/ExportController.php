@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\{PTK, Department, Category, Subcategory};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Maatwebsite\Excel\Facades\Excel;
 use Barryvdh\DomPDF\Facade\Pdf;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
@@ -15,22 +14,31 @@ class ExportController extends Controller
 {
     /**
      * Bangun query laporan range yang SUDAH terfilter visibilitas user.
+     * (Periode kini berbasis form_date)
      */
     private function buildRangeQuery(Request $r)
     {
         $q = PTK::visibleTo($r->user())
             ->with(['category','subcategory','department','pic']);
 
-        // Tanggal
-        if ($r->filled('start')) $q->whereDate('created_at', '>=', $r->start);
-        if ($r->filled('end'))   $q->whereDate('created_at', '<=', $r->end);
+        // Ambil input periode (string tanggal Y-m-d) lalu filter dengan form_date
+        $start = $r->input('start');
+        $end   = $r->input('end');
+
+        if ($start && $end) {
+            $q->whereBetween('form_date', [$start, $end]);
+        } elseif ($start) {
+            $q->whereDate('form_date', '>=', $start);
+        } elseif ($end) {
+            $q->whereDate('form_date', '<=', $end);
+        }
 
         // Filter entity
         if ($r->filled('category_id'))    $q->where('category_id', $r->category_id);
         if ($r->filled('subcategory_id')) $q->where('subcategory_id', $r->subcategory_id);
         if ($r->filled('department_id'))  $q->where('department_id', $r->department_id);
 
-        // Status (termasuk Overdue)
+        // Status (termasuk Overdue) — tetap pakai due_date/status
         if ($r->filled('status')) {
             if ($r->status === 'Overdue') {
                 $q->where('status', '!=', 'Completed')
@@ -46,8 +54,8 @@ class ExportController extends Controller
     private function rangeMeta(Request $r): array
     {
         return [
-            'start'             => $r->start,
-            'end'               => $r->end,
+            'start'             => $r->input('start'),
+            'end'               => $r->input('end'),
             'category_name'     => optional(Category::find($r->category_id))->name ?: 'Semua',
             'subcategory_name'  => optional(Subcategory::find($r->subcategory_id))->name ?: 'Semua',
             'department_name'   => optional(Department::find($r->department_id))->name ?: 'Semua',
@@ -231,10 +239,12 @@ class ExportController extends Controller
         return view('exports.range_form', compact('categories', 'departments', 'subcategories'));
     }
 
-    // ====== RANGE REPORT — pakai buildRangeQuery (sudah visibleTo) ======
+    // ====== RANGE REPORT — pakai buildRangeQuery (sudah visibleTo & pakai form_date) ======
     public function rangeReport(Request $r)
     {
-        $items = $this->buildRangeQuery($r)->orderBy('created_at','desc')->get();
+        $items = $this->buildRangeQuery($r)
+            ->orderBy('form_date','desc')   // urutkan berbasis form_date
+            ->get();
 
         return view('exports.range_report', [
             'items'         => $items,
@@ -252,10 +262,12 @@ class ExportController extends Controller
         ] + $this->rangeMeta($r));
     }
 
-    // ====== RANGE PDF — pakai buildRangeQuery (sudah visibleTo) ======
+    // ====== RANGE PDF — pakai buildRangeQuery (sudah visibleTo & pakai form_date) ======
     public function rangePdf(Request $r)
     {
-        $items = $this->buildRangeQuery($r)->orderBy('created_at','desc')->get();
+        $items = $this->buildRangeQuery($r)
+            ->orderBy('form_date','desc')
+            ->get();
         $meta  = $this->rangeMeta($r);
 
         $pdf = Pdf::loadView('exports.range_pdf', [
@@ -269,10 +281,12 @@ class ExportController extends Controller
         return $pdf->download($fname);
     }
 
-    // ====== RANGE EXCEL — pakai buildRangeQuery (sudah visibleTo) ======
+    // ====== RANGE EXCEL — pakai buildRangeQuery (sudah visibleTo & pakai form_date) ======
     public function rangeExcel(Request $r)
     {
-        $items = $this->buildRangeQuery($r)->orderBy('created_at','desc')->get();
+        $items = $this->buildRangeQuery($r)
+            ->orderBy('form_date','desc')
+            ->get();
         $meta  = $this->rangeMeta($r);
 
         return Excel::download(new class($items, $meta) implements
@@ -286,7 +300,7 @@ class ExportController extends Controller
                 foreach ($this->items as $i) {
                     $rows[] = [
                         $i->number ?? '-',
-                        $i->created_at?->format('Y-m-d'),
+                        $i->form_date?->format('Y-m-d'), // gunakan form_date untuk range export
                         $i->title,
                         optional($i->pic)->name,
                         optional($i->department)->name,

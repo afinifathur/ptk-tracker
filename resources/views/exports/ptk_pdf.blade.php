@@ -55,7 +55,6 @@
       <td class="meta">
         <div class="title">{{ $ptk->number ?? 'DRAFT' }}</div>
         <div class="small muted">
-          Dibuat: {{ $ptk->created_at->format('d M Y') }}<br>
           Departemen: {{ $ptk->department->name ?? '-' }}<br>
           Status: <span class="status">{{ $ptk->status }}</span>
         </div>
@@ -63,6 +62,19 @@
     </tr>
   </table>
   <div class="hr"></div>
+
+  {{-- TANGGAL FORM & TANGGAL INPUT --}}
+  <table class="w-full text-sm mb10" style="border:1px solid #d7dbe1;">
+    <tr>
+      <td style="width:30%; border-right:1px solid #d7dbe1;"><strong>Tanggal Form</strong></td>
+      <td>: {{ optional($ptk->form_date)->format('d M Y') }}</td>
+    </tr>
+    <tr>
+      <td style="border-right:1px solid #d7dbe1;"><strong>Tanggal Input</strong></td>
+      <td>: {{ $ptk->created_at?->timezone(config('app.timezone'))->format('d M Y H:i') }}</td>
+    </tr>
+    {{-- Due date & Approved at tetap di lokasi masing-masing (ringkasan & tanda tangan) --}}
+  </table>
 
   {{-- RINGKASAN --}}
   <table class="grid2 mb10">
@@ -91,7 +103,7 @@
   {{-- DESKRIPSI (4 bagian) --}}
   <table class="mb10">
     <tr><th>1) Deskripsi Ketidaksesuaian</th></tr>
-    <tr><td>{!! nl2br(e($ptk->description_nc ?? '-')) !!}</td></tr>
+    <tr><td>{!! nl2br(e($ptk->desc_nc ?? '-')) !!}</td></tr>
   </table>
   <table class="mb10">
     <tr><th>2) Evaluasi Masalah</th></tr>
@@ -99,11 +111,11 @@
   </table>
   <table class="mb10">
     <tr><th>3a) Koreksi (Perbaikan Masalah)</th></tr>
-    <tr><td>{!! nl2br(e($ptk->correction_action ?? '-')) !!}</td></tr>
+    <tr><td>{!! nl2br(e($ptk->action_correction ?? '-')) !!}</td></tr>
   </table>
   <table class="mb10">
     <tr><th>3b) Tindakan Korektif (Akar Masalah)</th></tr>
-    <tr><td>{!! nl2br(e($ptk->corrective_action ?? '-')) !!}</td></tr>
+    <tr><td>{!! nl2br(e($ptk->action_corrective ?? '-')) !!}</td></tr>
   </table>
 
   {{-- LAMPIRAN FOTO (3 kolom + caption, maks 6) --}}

@@ -80,6 +80,7 @@ class PTKController extends Controller
     # =========================================================
     public function store(Request $request): RedirectResponse
     {
+        // validasi (form_date wajib)
         $data = $this->validatePayload($request);
 
         // Paksa admin dept hanya ke departemennya
@@ -89,6 +90,7 @@ class PTKController extends Controller
 
         $data['created_by'] = $request->user()->id;
 
+        // simpan (form_date ikut mass-assign)
         $ptk = PTK::create(collect($data)->except('attachments')->toArray());
 
         $this->handleAttachments($request, $ptk->id);
@@ -127,6 +129,7 @@ class PTKController extends Controller
     # =========================================================
     public function update(Request $request, PTK $ptk): RedirectResponse
     {
+        // validasi (form_date wajib)
         $data = $this->validatePayload($request);
 
         if ($request->user()->hasAnyRole($this->deptAdminRoles)) {
@@ -138,6 +141,7 @@ class PTKController extends Controller
             $data['status'] = 'In Progress';
         }
 
+        // update (form_date ikut mass-assign)
         $ptk->update(collect($data)->except('attachments')->toArray());
 
         $this->handleAttachments($request, $ptk->id);
@@ -173,13 +177,13 @@ class PTKController extends Controller
 
         $notStarted = (clone $base)
             ->where('status', 'Not Started')
-            ->orderBy('created_at', 'asc')
+            ->orderBy('form_date', 'asc')
             ->limit(self::KANBAN_LIMIT)
             ->get();
 
         $inProgress = (clone $base)
             ->where('status', 'In Progress')
-            ->orderBy('created_at', 'asc')
+            ->orderBy('form_date', 'asc')
             ->limit(self::KANBAN_LIMIT)
             ->get();
 
@@ -333,7 +337,7 @@ class PTKController extends Controller
 
         // batasi department sesuai DeptScope (untuk input form)
         if (!empty($allowed)) {
-            /** @var array<string, mixed> $deptRule */
+            /** @var array<int, mixed> $deptRule */
             $deptRule = $rules['department_id'];
             $deptRule[] = Rule::in($allowed);
             $rules['department_id'] = $deptRule;
@@ -346,19 +350,20 @@ class PTKController extends Controller
     private function rules(): array
     {
         return [
-            'title'             => ['required','string','max:255'],
-            'description'       => ['nullable','string'],
-            'description_nc'    => ['nullable','string'],
-            'evaluation'        => ['nullable','string'],
-            'correction_action' => ['nullable','string'],
-            'corrective_action' => ['nullable','string'],
-            'category_id'       => ['required','exists:categories,id'],
-            'subcategory_id'    => ['nullable','exists:subcategories,id'],
-            'department_id'     => ['required','exists:departments,id'],
-            'pic_user_id'       => ['required','exists:users,id'],
-            'due_date'          => ['nullable','date'],
-            'status'            => ['nullable', Rule::in(self::STATUSES)],
-            'attachments.*'     => ['file','mimes:jpg,jpeg,png,pdf','max:5120'],
+            'title'              => ['required','string','max:255'],
+            'description'        => ['nullable','string'],
+            'desc_nc'            => ['nullable','string'],        // renamed
+            'evaluation'         => ['nullable','string'],
+            'action_correction'  => ['nullable','string'],        // renamed
+            'action_corrective'  => ['nullable','string'],        // renamed
+            'category_id'        => ['required','exists:categories,id'],
+            'subcategory_id'     => ['nullable','exists:subcategories,id'],
+            'department_id'      => ['required','exists:departments,id'],
+            'pic_user_id'        => ['required','exists:users,id'],
+            'due_date'           => ['nullable','date'],
+            'form_date'          => ['required','date'],          // <<< WAJIB
+            'status'             => ['nullable', Rule::in(self::STATUSES)],
+            'attachments.*'      => ['file','mimes:jpg,jpeg,png,pdf','max:5120'],
         ];
     }
 

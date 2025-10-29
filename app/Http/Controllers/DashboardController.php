@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\PTK;
-use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 
 class DashboardController extends Controller
@@ -16,15 +15,14 @@ class DashboardController extends Controller
         // ===============================
         // Periode 26 minggu ke belakang
         // ===============================
-        $now  = now();
-        $to   = $now->copy()->endOfDay();
-        $from = $now->copy()->subWeeks(26)->startOfWeek(); // ~6 bulan (mulai Senin)
+        $from = now()->copy()->subWeeks(26)->startOfWeek(); // mulai Senin (ISO)
+        $to   = now();                                      // saat ini
 
         // Base query harus lewat scope visibleTo
         $base = PTK::visibleTo($user)->with(['department', 'category', 'subcategory']);
 
         // ===============================
-        // KPI Ringkas
+        // KPI Ringkas (tetap pakai status/due_date)
         // ===============================
         $total      = (clone $base)->count();
         $completed  = (clone $base)->where('status', 'Completed')->count();
@@ -35,14 +33,15 @@ class DashboardController extends Controller
             ->count();
 
         // ===============================
-        // Tren Mingguan (26 minggu)
+        // Tren Mingguan (26 minggu) — basis: form_date
         // ===============================
         $seriesRaw = (clone $base)
-            ->whereBetween('created_at', [$from, $to])
-            ->selectRaw('YEARWEEK(created_at, 3) as yw, COUNT(*) as c')
+            ->whereBetween('form_date', [$from->toDateString(), $to->toDateString()])
+            ->selectRaw('YEARWEEK(form_date, 3) as yw, COUNT(*) as c')
             ->groupBy('yw')
-            ->pluck('c', 'yw'); // hasil: [202401 => 5, 202402 => 3, ...]
+            ->pluck('c', 'yw'); // ex: [202401 => 5, 202402 => 3, ...]
 
+        // daftar minggu dari $from..$to (langkah 1 minggu)
         $weeks = collect(CarbonPeriod::create($from, '1 week', $to))
             ->map(fn ($w) => $w->copy()->startOfWeek());
 
@@ -50,13 +49,14 @@ class DashboardController extends Controller
         $data   = [];
 
         foreach ($weeks as $week) {
-            $yw = $week->format('oW'); // kombinasi tahun + minggu ISO
-            $labels[] = $week->format('W');
+            // kunci kompatibel dengan YEARWEEK(...,3)
+            $yw = (int)$week->format('oW'); // contoh '202501' -> 202501
+            $labels[] = $week->format('W'); // label "01".."53"
             $data[] = (int)($seriesRaw[$yw] ?? 0);
         }
 
         // ===============================
-        // Penanda bulan (ID) untuk chart
+        // Penanda bulan (ID) untuk chart — basis: form_date
         // ===============================
         $indoMonths = [1 => 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nop', 'Des'];
         $monthMarks = [];
@@ -73,7 +73,7 @@ class DashboardController extends Controller
         }
 
         // ===============================
-        // SLA 6 Bulan (Completed On Time)
+        // SLA 6 Bulan (Completed On Time) — TIDAK berubah
         // ===============================
         $slaBase   = (clone $base)
             ->whereBetween('created_at', [$from, $to])
@@ -123,7 +123,7 @@ class DashboardController extends Controller
             ]);
 
         // ===============================
-        // Overdue PTK (Top 10)
+        // Overdue PTK (Top 10) — TIDAK berubah
         // ===============================
         $overdueTop = (clone $base)
             ->with(['pic:id,name', 'department:id,name', 'category:id,name', 'subcategory:id,name'])
