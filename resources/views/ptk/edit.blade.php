@@ -39,8 +39,8 @@
 
     <label for="department_id">Departemen
       <select id="department_id" name="department_id" class="border p-2 rounded w-full" required>
-        @foreach($departments as $d)
-          <option value="{{ $d->id }}" @selected(old('department_id', $ptk->department_id) == $d->id)>{{ $d->name }}</option>
+        @foreach($departments as $id => $name)
+          <option value="{{ $id }}" @selected(old('department_id', $ptk->department_id) == $id)>{{ $name }}</option>
         @endforeach
       </select>
       @error('department_id') <small class="text-red-600">{{ $message }}</small> @enderror

@@ -33,35 +33,16 @@
       @error('subcategory_id') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
-    {{-- Departemen: hidden utk admin dept, dropdown utk role lain --}}
-    @php
-      $authUser      = auth()->user();
-      $isDeptAdmin   = $authUser->hasAnyRole('admin_qc_flange','admin_qc_fitting','admin_hr','admin_k3');
-      $deptOldOrUser = old('department_id', $authUser->department_id);
-    @endphp
-
-    @if($isDeptAdmin)
-      {{-- Admin QC/HR/K3: paksa departemen = departemen user --}}
-      <div class="md:col-span-2">
-        <label class="block text-sm text-gray-500">Departemen</label>
-        <div class="border rounded p-2 bg-gray-50">
-          <strong>{{ $authUser->department->name ?? '-' }}</strong>
-        </div>
-        <input type="hidden" name="department_id" value="{{ $deptOldOrUser }}">
-        @error('department_id') <small class="text-red-600">{{ $message }}</small> @enderror
-      </div>
-    @else
-      {{-- Role lain: pilih dari list yang difilter di controller --}}
-      <label for="department_id">Departemen
-        <select id="department_id" name="department_id" class="border p-2 rounded w-full" required>
-          <option value="">-- pilih --</option>
-          @foreach($departments as $d)
-            <option value="{{ $d->id }}" @selected(old('department_id') == $d->id)>{{ $d->name }}</option>
-          @endforeach
-        </select>
-        @error('department_id') <small class="text-red-600">{{ $message }}</small> @enderror
-      </label>
-    @endif
+    {{-- Departemen: SELALU selectable untuk semua role --}}
+    <label for="department_id">Departemen
+      <select id="department_id" name="department_id" class="border p-2 rounded w-full" required>
+        <option value="">-- pilih --</option>
+        @foreach($departments as $id => $name)
+          <option value="{{ $id }}" @selected(old('department_id') == $id)>{{ $name }}</option>
+        @endforeach
+      </select>
+      @error('department_id') <small class="text-red-600">{{ $message }}</small> @enderror
+    </label>
 
     {{-- PIC: TIDAK di-disabled untuk role apa pun --}}
     <label for="pic_user_id">PIC

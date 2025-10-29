@@ -22,12 +22,6 @@ class PTKController extends Controller
     private const KANBAN_LIMIT = 30;
     private const STATUSES     = ['Not Started', 'In Progress', 'Completed'];
 
-    /**
-     * Roles admin per-departemen yang dipaksa mengikuti department_id user.
-     * Juga dipakai untuk membatasi kandidat PIC.
-     */
-    private array $deptAdminRoles = ['admin_qc_flange', 'admin_qc_fitting', 'admin_hr', 'admin_k3'];
-
     public function __construct(
         private readonly AttachmentService $attachments
     ) {
@@ -69,7 +63,8 @@ class PTKController extends Controller
     public function create(Request $request): View
     {
         return view('ptk.create', [
-            'departments'   => $this->departmentsFor($request),
+            // Semua departemen (admin bebas pilih)
+            'departments'   => Department::orderBy('name')->pluck('name', 'id'),
             'categories'    => Category::all(),
             'picCandidates' => $this->picCandidatesFor($request),
         ]);
@@ -80,13 +75,8 @@ class PTKController extends Controller
     # =========================================================
     public function store(Request $request): RedirectResponse
     {
-        // validasi (form_date wajib)
+        // validasi (form_date wajib) — tidak lagi membatasi department via DeptScope
         $data = $this->validatePayload($request);
-
-        // Paksa admin dept hanya ke departemennya
-        if ($request->user()->hasAnyRole($this->deptAdminRoles)) {
-            $data['department_id'] = $request->user()->department_id;
-        }
 
         $data['created_by'] = $request->user()->id;
 
@@ -118,7 +108,8 @@ class PTKController extends Controller
     {
         return view('ptk.edit', [
             'ptk'           => $ptk,
-            'departments'   => $this->departmentsFor($request),
+            // Semua departemen (admin bebas pilih)
+            'departments'   => Department::orderBy('name')->pluck('name', 'id'),
             'categories'    => Category::all(),
             'picCandidates' => $this->picCandidatesFor($request),
         ]);
@@ -129,12 +120,8 @@ class PTKController extends Controller
     # =========================================================
     public function update(Request $request, PTK $ptk): RedirectResponse
     {
-        // validasi (form_date wajib)
+        // validasi (form_date wajib) — tidak lagi membatasi department via DeptScope
         $data = $this->validatePayload($request);
-
-        if ($request->user()->hasAnyRole($this->deptAdminRoles)) {
-            $data['department_id'] = $request->user()->department_id;
-        }
 
         // Auto-move ke In Progress saat evaluation terisi dan status masih Not Started
         if ($request->filled('evaluation') && $ptk->status === 'Not Started') {
@@ -301,15 +288,6 @@ class PTKController extends Controller
     # =========================================================
     # Helpers (private)
     # =========================================================
-    /** Dropdown departemen di form (menghormati DeptScope). */
-    private function departmentsFor(Request $request)
-    {
-        $allowed = DeptScope::allowedDeptIds($request->user());
-
-        return empty($allowed)
-            ? Department::all()
-            : Department::whereIn('id', $allowed)->get();
-    }
 
     /**
      * Kandidat PIC untuk form create/edit.
@@ -331,19 +309,9 @@ class PTKController extends Controller
 
     private function validatePayload(Request $request): array
     {
-        $allowed = DeptScope::allowedDeptIds($request->user());
-
-        $rules = $this->rules();
-
-        // batasi department sesuai DeptScope (untuk input form)
-        if (!empty($allowed)) {
-            /** @var array<int, mixed> $deptRule */
-            $deptRule = $rules['department_id'];
-            $deptRule[] = Rule::in($allowed);
-            $rules['department_id'] = $deptRule;
-        }
-
-        return $request->validate($rules);
+        // Tidak lagi menambah Rule::in($allowed) pada department_id,
+        // agar sesuai dengan form yang membebaskan pilihan departemen.
+        return $request->validate($this->rules());
     }
 
     /** Aturan validasi bersama untuk store/update. */

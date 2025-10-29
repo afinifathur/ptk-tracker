@@ -13,12 +13,12 @@ class RolePermissionSeeder extends Seeder
 {
     public function run(): void
     {
-        // Pastikan cache permission Spatie dibersihkan
+        // Bersihkan cache permission Spatie (penting)
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         $guard = config('auth.defaults.guard', 'web');
 
-        // ==== 1) Definisikan roles & permissions ====
+        // ==== 1) Daftar role ====
         $roles = [
             'admin_qc',
             'admin_qc_flange',
@@ -31,50 +31,63 @@ class RolePermissionSeeder extends Seeder
             'auditor',
         ];
 
-        $permissions = [
-            // PTK
-            'ptk.create',
-            'ptk.view',
-            'ptk.update',
-            'ptk.approve',
-            'ptk.reject',
-            // Menu
-            'menu.queue',
-            'menu.recycle',
+        // ==== 2) Permissions yang dipakai UI (sesuai instruksi) ====
+        $uiPerms = [
+            'ptk.create','ptk.update','ptk.delete',
+            'ptk.view','ptk.export',           // penting untuk detail & preview/unduh
+            'menu.queue','menu.recycle','menu.settings',
             'menu.audit',
         ];
 
-        // Matrix role -> permissions
+        // ==== 3) Matrix role -> permissions ====
         $matrix = [
-            'admin_qc'         => ['ptk.create','ptk.view','ptk.update'],
-            'admin_qc_flange'  => ['ptk.create','ptk.view','ptk.update'],
-            'admin_qc_fitting' => ['ptk.create','ptk.view','ptk.update'],
-            'admin_hr'         => ['ptk.create','ptk.view','ptk.update'],
-            'admin_k3'         => ['ptk.create','ptk.view','ptk.update'],
+            // role admin (disamakan)
+            'admin_qc'         => ['ptk.create','ptk.update','ptk.delete','ptk.view','ptk.export','menu.queue','menu.recycle','menu.settings'],
+            'admin_qc_flange'  => ['ptk.create','ptk.update','ptk.delete','ptk.view','ptk.export','menu.queue','menu.recycle','menu.settings'],
+            'admin_qc_fitting' => ['ptk.create','ptk.update','ptk.delete','ptk.view','ptk.export','menu.queue','menu.recycle','menu.settings'],
+            'admin_hr'         => ['ptk.create','ptk.update','ptk.delete','ptk.view','ptk.export','menu.queue','menu.recycle','menu.settings'],
+            'admin_k3'         => ['ptk.create','ptk.update','ptk.delete','ptk.view','ptk.export','menu.queue','menu.recycle','menu.settings'],
+
+            // non-admin
             'kabag_qc'         => ['ptk.view','ptk.approve','menu.queue'],
             'manager_hr'       => ['ptk.view','ptk.approve','menu.queue'],
             'director'         => '*', // semua permission
             'auditor'          => ['ptk.view','menu.audit'],
         ];
 
+        // ==== 4) Bangun daftar permission final: UI + yang ada di matrix ====
+        $matrixPerms = collect($matrix)
+            ->flatMap(fn($permList) => $permList === '*' ? [] : $permList)
+            ->unique()
+            ->values();
+
+        $permissions = collect($uiPerms)
+            ->merge($matrixPerms)
+            ->unique()
+            ->values()
+            ->all();
+
+        // ==== 5) Buat role & permission, lalu assign ====
         DB::transaction(function () use ($guard, $roles, $permissions, $matrix) {
-            // ==== 2) Buat permissions ====
+            // Buat semua permissions (hindari mismatch key)
             $permMap = [];
             foreach ($permissions as $p) {
-                $permMap[$p] = Permission::firstOrCreate(
-                    ['name' => $p, 'guard_name' => $guard]
-                );
+                $permMap[$p] = Permission::firstOrCreate([
+                    'name' => $p,
+                    'guard_name' => $guard,
+                ]);
             }
 
-            // ==== 3) Buat roles ====
+            // Buat semua roles
             $roleMap = [];
             foreach ($roles as $r) {
-                $roleMap[$r] = Role::firstOrCreate(
-                    ['name' => $r, 'guard_name' => $guard]
-                );
+                $roleMap[$r] = Role::firstOrCreate([
+                    'name' => $r,
+                    'guard_name' => $guard,
+                ]);
             }
 
-            // ==== 4) Isi matrix role-permission ====
+            // Assign permissions sesuai matrix
             foreach ($matrix as $roleName => $permList) {
                 $role = $roleMap[$roleName] ?? null;
                 if (!$role) {
@@ -82,22 +95,25 @@ class RolePermissionSeeder extends Seeder
                 }
 
                 if ($permList === '*') {
-                    // Director: semua permission
+                    // Director: semua permission yang sudah terdaftar
                     $role->syncPermissions(Permission::where('guard_name', $guard)->get());
                 } else {
-                    $assign = collect($permList)->map(fn($name) => $permMap[$name])->all();
+                    // Map aman: hanya ambil permission yang sudah dibuat
+                    $assign = collect($permList)
+                        ->map(fn($name) => $permMap[$name] ?? null)
+                        ->filter()
+                        ->values()
+                        ->all();
+
                     $role->syncPermissions($assign);
                 }
             }
         });
 
-        // ==== 5) Fallback: user tanpa role => director ====
-        // (Sama seperti kode awal; sesuaikan jika kebijakan berbeda)
+        // ==== 6) Fallback: user tanpa role => director ====
         User::query()
             ->doesntHave('roles')
-            ->each(function (User $u) {
-                $u->assignRole('director');
-            });
+            ->each(fn(User $u) => $u->assignRole('director'));
 
         // Bersihkan cache lagi setelah perubahan
         app(PermissionRegistrar::class)->forgetCachedPermissions();
