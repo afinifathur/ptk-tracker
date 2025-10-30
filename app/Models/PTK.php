@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\{Attachment, Category, Department, Subcategory, User};
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\{BelongsTo, HasMany};
@@ -21,22 +22,23 @@ class PTK extends Model implements AuditableContract
 
     /**
      * Kolom yang boleh diisi mass assignment.
+     * (pastikan department_id & pic_user_id ter-cover)
      */
     protected $fillable = [
         'number',
         'title',
         'description',
-        'desc_nc',              // diubah dari description_nc
+        'desc_nc',              // renamed from description_nc
         'evaluation',
-        'action_correction',    // diubah dari correction_action
-        'action_corrective',    // diubah dari corrective_action
+        'action_correction',    // renamed from correction_action
+        'action_corrective',    // renamed from corrective_action
         'category_id',
         'subcategory_id',
         'department_id',
         'pic_user_id',
         'status',
         'due_date',
-        'form_date',            // kolom baru ditambahkan
+        'form_date',
         'approved_at',
         'approver_id',
         'director_id',
@@ -48,7 +50,7 @@ class PTK extends Model implements AuditableContract
      */
     protected $casts = [
         'due_date'    => 'datetime',
-        'form_date'   => 'datetime', // tambahkan agar otomatis jadi instance Carbon
+        'form_date'   => 'datetime',
         'approved_at' => 'datetime',
     ];
 
@@ -76,69 +78,105 @@ class PTK extends Model implements AuditableContract
         'created_by',
     ];
 
-    # =========================================================
-    # MUTATOR — Lindungi nomor agar immutable
-    # =========================================================
+    // =====================================================================
+    // CONSTANTS (opsional, membantu konsistensi)
+    // =====================================================================
+    public const STATUS_NOT_STARTED = 'Not Started';
+    public const STATUS_IN_PROGRESS = 'In Progress';
+    public const STATUS_DONE        = 'Done';
+
+    // =====================================================================
+    // MUTATOR — number immutable (kalau sudah ada, jangan ditimpa)
+    // =====================================================================
     public function setNumberAttribute($value): void
     {
         if (!empty($this->attributes['number'])) {
-            return; // sudah ada, jangan ditimpa
+            return;
         }
-
         $this->attributes['number'] = $value;
     }
 
-    # =========================================================
-    # SCOPE — Batasi visibilitas PTK otomatis berdasarkan role
-    # =========================================================
+    // =====================================================================
+    // SCOPES
+    // =====================================================================
+
+    /**
+     * Scope visibilitas generik berdasarkan role TANPA mengunci departemen saat create.
+     *
+     * Aturan:
+     * - director / auditor  => lihat semua
+     * - role admin (admin_qc_flange, admin_qc_fitting, admin_hr, admin_k3, kabag_qc, manager_hr)
+     *     => lihat (PTK yang dia PIC/creator) ATAU (PTK di departemen user)
+     * - lainnya => hanya (PIC/creator)
+     */
     public function scopeVisibleTo(Builder $q, User $user): Builder
     {
-        $deptId = fn($n) => Department::where('name', $n)->value('id');
-
-        if ($user->hasRole('director|auditor')) {
+        // 1) Full access
+        if ($user->hasAnyRole(['director', 'auditor', 'superadmin'])) {
             return $q;
         }
 
-        if ($user->hasRole('kabag_qc')) {
-            return $q->whereIn('department_id', array_filter([
-                $deptId('Flange'),
-                $deptId('Fitting'),
-            ]));
+        // 2) Admin/manager level (akses gabungan: PIC/creator OR department user)
+        if ($user->hasAnyRole([
+            'kabag_qc',
+            'manager_hr',
+            'admin_qc_flange',
+            'admin_qc_fitting',
+            'admin_hr',
+            'admin_k3',
+        ])) {
+            return $q->where(function (Builder $qq) use ($user) {
+                $qq->where('pic_user_id', $user->id)
+                   ->orWhere('created_by', $user->id)
+                   ->orWhere('department_id', $user->department_id);
+            });
         }
 
-        if ($user->hasRole('admin_qc_flange')) {
-            return $q->where('department_id', $deptId('Flange'));
-        }
-
-        if ($user->hasRole('admin_qc_fitting')) {
-            return $q->where('department_id', $deptId('Fitting'));
-        }
-
-        if ($user->hasRole('manager_hr')) {
-            return $q->whereIn('department_id', array_filter([
-                $deptId('HR'),
-                $deptId('K3 & Lingkungan'),
-            ]));
-        }
-
-        if ($user->hasRole('admin_hr')) {
-            return $q->where('department_id', $deptId('HR'));
-        }
-
-        if ($user->hasRole('admin_k3')) {
-            return $q->where('department_id', $deptId('K3 & Lingkungan'));
-        }
-
-        // Default: hanya data sendiri (PIC atau creator)
-        return $q->where(function ($qq) use ($user) {
+        // 3) Default (non-admin): PIC/creator saja
+        return $q->where(function (Builder $qq) use ($user) {
             $qq->where('pic_user_id', $user->id)
                ->orWhere('created_by', $user->id);
         });
     }
 
-    # =========================================================
-    # RELATIONSHIPS
-    # =========================================================
+    /**
+     * Scope helper untuk status.
+     */
+    public function scopeStatus(Builder $q, ?string $status): Builder
+    {
+        return $status ? $q->where('status', $status) : $q;
+    }
+
+    /**
+     * Scope pencarian ringan di judul/nomor/deskripsi.
+     */
+    public function scopeSearch(Builder $q, ?string $term): Builder
+    {
+        if (!$term) return $q;
+
+        $like = '%' . str_replace('%', '\%', $term) . '%';
+        return $q->where(function (Builder $qq) use ($like) {
+            $qq->where('title', 'like', $like)
+               ->orWhere('number', 'like', $like)
+               ->orWhere('description', 'like', $like)
+               ->orWhere('desc_nc', 'like', $like);
+        });
+    }
+
+    /**
+     * Scope untuk filter milik user (PIC/creator).
+     */
+    public function scopeOwnedBy(Builder $q, User $user): Builder
+    {
+        return $q->where(function (Builder $qq) use ($user) {
+            $qq->where('pic_user_id', $user->id)
+               ->orWhere('created_by', $user->id);
+        });
+    }
+
+    // =====================================================================
+    // RELATIONSHIPS
+    // =====================================================================
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
