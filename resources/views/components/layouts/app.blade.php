@@ -10,48 +10,67 @@
   {{-- Vite assets --}}
   @vite(['resources/css/app.css','resources/js/app.js'])
 
-  {{-- Vendor CSS/JS (global) --}}
-  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
-  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-
-  {{-- Alpine MUST be deferred --}}
-  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  {{-- Vendor CSS (lokal) --}}
+  <link rel="stylesheet" href="{{ asset('vendor/bootstrap5/bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ asset('vendor/datatables/jquery.dataTables.min.css') }}">
+  <link rel="stylesheet" href="{{ asset('vendor/datatables/dataTables.bootstrap5.min.css') }}">
 
   {{-- Sembunyikan elemen ber-x-cloak sampai Alpine siap --}}
   <style>[x-cloak]{display:none !important;}</style>
+
+  {{-- Sentuhan kecil agar nuansa abu-abu tetap rapi & minimalis --}}
+  <style>
+    table.dataTable thead th { font-weight: 600; }
+    table.dataTable thead th, table.dataTable tbody td {
+      border-bottom: 1px solid #e5e7eb !important;
+    }
+    table.dataTable.stripe tbody tr:nth-child(odd) { background-color: #fafafa !important; }
+    table.dataTable.hover tbody tr:hover { background-color: #f3f4f6 !important; }
+
+    .topnav a,
+    .topnav .nav-link {
+      color: #374151;
+      text-decoration: none;
+    }
+    .topnav a:hover,
+    .topnav .nav-link:hover {
+      color: #111827;
+      text-decoration: none;
+    }
+    .dark .topnav a,
+    .dark .topnav .nav-link { color:#e5e7eb; }
+    .dark .topnav a:hover,
+    .dark .topnav .nav-link:hover { color:#f9fafb; }
+  </style>
 </head>
+
 <body class="h-full bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
   <div class="max-w-7xl mx-auto p-6">
-
-    {{-- =======================
-         HEADER
-       ======================= --}}
     <header class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold">PTK Tracker</h1>
 
       {{-- NAV --}}
-      <nav class="hidden md:flex space-x-4">
+      <nav class="topnav hidden md:flex space-x-4">
         <a href="{{ route('dashboard') }}">Dashboard</a>
         <a href="{{ route('ptk.index') }}">Daftar PTK</a>
         <a href="{{ route('ptk.kanban') }}">Kanban</a>
 
-        {{-- New PTK: sembunyikan khusus Direktur (Auditor memang tak punya permission) --}}
         @can('ptk.create')
           @unlessrole('director')
             <a href="{{ route('ptk.create') }}">New PTK</a>
           @endunlessrole
         @endcan
 
-        @can('menu.queue')
-          <a href="{{ route('ptk.queue') }}">Antrian Persetujuan</a>
-        @endcan
+        {{-- Hanya tampil jika bukan admin QC/HR/K3 --}}
+        @unlessrole('admin_qc_flange|admin_qc_fitting|admin_hr|admin_k3')
+          @can('menu.queue')
+            <a href="{{ route('ptk.queue') }}">Antrian Persetujuan</a>
+          @endcan
 
-        @can('menu.recycle')
-          <a href="{{ route('ptk.recycle') }}">Recycle Bin</a>
-        @endcan
+          @can('menu.recycle')
+            <a href="{{ route('ptk.recycle') }}">Recycle Bin</a>
+          @endcan
+        @endunlessrole
 
         <a href="{{ route('exports.range.form') }}">Laporan Periode</a>
 
@@ -59,7 +78,6 @@
           <a href="{{ route('exports.audits.index') }}">Audit Log</a>
         @endcan
 
-        {{-- ✅ Settings: tampil untuk Direktur + Kabag QC + Manager HR + Admin QC Flange/Fitting + HR + K3 --}}
         @hasanyrole('director|kabag_qc|manager_hr|admin_qc_flange|admin_qc_fitting|admin_hr|admin_k3')
           <a href="{{ route('settings.categories') }}">Settings</a>
         @endhasanyrole
@@ -113,9 +131,28 @@
 
   @stack('scripts')
 
-  {{-- Uji cepat Alpine (sementara): bukalah Console dan refresh, harus log "Alpine OK" --}}
+  {{-- JS lokal --}}
+  <script src="{{ asset('vendor/polyfill/polyfill.min.js') }}"></script>
+  <script src="{{ asset('vendor/jquery/jquery.min.js') }}"></script>
+  <script src="{{ asset('vendor/bootstrap5/bootstrap.bundle.min.js') }}"></script>
+  <script src="{{ asset('vendor/datatables/jquery.dataTables.min.js') }}"></script>
+  <script src="{{ asset('vendor/datatables/dataTables.bootstrap5.min.js') }}"></script>
+  <script src="{{ asset('vendor/chartjs/chart.umd.min.js') }}"></script>
+  <script src="{{ asset('vendor/sortable/Sortable.min.js') }}"></script>
+  <script src="{{ asset('vendor/alpine/alpine.min.js') }}" defer></script>
+
   <script>
-    document.addEventListener('alpine:init', () => console.log('Alpine OK'));
+    document.addEventListener('DOMContentLoaded', function () {
+      if (window.jQuery && $.fn.dataTable) {
+        $('.js-dt').each(function () {
+          const $t = $(this);
+          if (!$t.hasClass('dataTable')) {
+            $t.DataTable({ pageLength: 10, lengthChange: true, autoWidth: false, order: [] });
+          }
+        });
+      }
+    });
   </script>
+  <script>document.addEventListener('alpine:init', () => console.log('Alpine OK'));</script>
 </body>
 </html>

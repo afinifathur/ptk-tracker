@@ -5,7 +5,7 @@
       <h1 class="text-xl font-semibold">PTK {{ $ptk->number ?? '-' }}</h1>
 
       <div class="flex flex-wrap gap-2">
-        {{-- ✅ Tombol Submit PTK (hanya admin dept tertentu & belum Completed) --}}
+        {{-- ✅ Tombol Submit PTK --}}
         @hasanyrole('admin_qc_flange|admin_qc_fitting|admin_hr|admin_k3')
           @if($ptk->status !== 'Completed')
             <form method="POST" action="{{ route('ptk.submit', $ptk) }}" class="inline">
@@ -83,21 +83,19 @@
           {{ optional($ptk->approved_at)->format('Y-m-d') ?? '-' }}
         </div>
 
-        {{-- >>> Dua tanggal: Form & Input --}}
-        <div class="mt-4">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div>
-              <span class="text-gray-500">Tanggal Form:</span>
-              <span class="font-medium">
-                {{ optional($ptk->form_date)->format('d M Y') }}
-              </span>
-            </div>
-            <div>
-              <span class="text-gray-500">Tanggal Input:</span>
-              <span class="font-medium">
-                {{ $ptk->created_at?->timezone(config('app.timezone'))->format('d M Y H:i') }}
-              </span>
-            </div>
+        {{-- Dua tanggal --}}
+        <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div>
+            <span class="text-gray-500">Tanggal Form:</span>
+            <span class="font-medium">
+              {{ optional($ptk->form_date)->format('d M Y') }}
+            </span>
+          </div>
+          <div>
+            <span class="text-gray-500">Tanggal Input:</span>
+            <span class="font-medium">
+              {{ $ptk->created_at?->timezone(config('app.timezone'))->format('d M Y H:i') }}
+            </span>
           </div>
         </div>
       </div>
@@ -105,34 +103,30 @@
       {{-- Deskripsi singkat --}}
       <div class="bg-white dark:bg-gray-800 rounded-xl p-5 shadow">
         <div class="text-xs text-gray-500">Deskripsi singkat</div>
-        <div class="prose dark:prose-invert max-w-none">{!! nl2br(e($ptk->description ?? '—')) !!}</div>
+        <div class="prose dark:prose-invert max-w-none">
+          {!! nl2br(e($ptk->description ?? '—')) !!}
+        </div>
       </div>
     </div>
 
-    {{-- SECTION UTAMA --}}
+    {{-- Section utama --}}
     <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow space-y-6">
-      <div>
-        <h2 class="font-semibold mb-2">1. Deskripsi Ketidaksesuaian</h2>
-        <div class="prose dark:prose-invert max-w-none">{!! nl2br(e($ptk->desc_nc ?? '—')) !!}</div>
-      </div>
-
-      <div>
-        <h2 class="font-semibold mb-2">2. Evaluasi Masalah (Analisis)</h2>
-        <div class="prose dark:prose-invert max-w-none">{!! nl2br(e($ptk->evaluation ?? '—')) !!}</div>
-      </div>
-
-      <div>
-        <h2 class="font-semibold mb-2">3a. Tindakan Koreksi</h2>
-        <div class="prose dark:prose-invert max-w-none">{!! nl2br(e($ptk->action_correction ?? '—')) !!}</div>
-      </div>
-
-      <div>
-        <h2 class="font-semibold mb-2">3b. Tindakan Korektif</h2>
-        <div class="prose dark:prose-invert max-w-none">{!! nl2br(e($ptk->action_corrective ?? '—')) !!}</div>
-      </div>
+      @foreach ([
+        '1. Deskripsi Ketidaksesuaian' => $ptk->desc_nc,
+        '2. Evaluasi Masalah (Analisis)' => $ptk->evaluation,
+        '3a. Tindakan Koreksi' => $ptk->action_correction,
+        '3b. Tindakan Korektif' => $ptk->action_corrective,
+      ] as $title => $content)
+        <div>
+          <h2 class="font-semibold mb-2">{{ $title }}</h2>
+          <div class="prose dark:prose-invert max-w-none">
+            {!! nl2br(e($content ?? '—')) !!}
+          </div>
+        </div>
+      @endforeach
     </div>
 
-    {{-- LAMPIRAN --}}
+    {{-- Lampiran --}}
     <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow">
       <h2 class="font-semibold mb-3">Lampiran</h2>
 
@@ -140,7 +134,7 @@
         <ul class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
           @foreach($ptk->attachments as $att)
             @php
-              $url   = \Illuminate\Support\Facades\Storage::url($att->path);
+              $url   = Storage::url($att->path);
               $mime  = strtolower($att->mime ?? '');
               $isImg = str_starts_with($mime, 'image/');
             @endphp
@@ -155,13 +149,16 @@
                 </button>
               @else
                 <a href="{{ $url }}" target="_blank"
-                   class="flex items-center justify-center w-full aspect-[4/3] rounded-lg ring-1 ring-gray-200 dark:ring-gray-700 bg-gray-50 dark:bg-gray-900">
-                  <span class="text-xs text-gray-600 dark:text-gray-300">
+                   class="flex items-center justify-center w-full aspect-[4/3] rounded-lg ring-1 ring-gray-200 dark:ring-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100">
+                  <span class="text-xs">
                     {{ strtoupper(pathinfo($att->original_name, PATHINFO_EXTENSION)) }}
                   </span>
                 </a>
               @endif
-              <div class="mt-1 text-xs truncate" title="{{ $att->original_name }}">{{ $att->original_name }}</div>
+              <div class="mt-1 text-xs truncate text-gray-700 dark:text-gray-200"
+                   title="{{ $att->original_name }}">
+                   {{ $att->original_name }}
+              </div>
             </li>
           @endforeach
         </ul>
@@ -170,7 +167,7 @@
       @endif
     </div>
 
-    {{-- MODAL PREVIEW --}}
+    {{-- Modal preview gambar --}}
     <div x-show="preview" x-transition
          class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
          x-cloak

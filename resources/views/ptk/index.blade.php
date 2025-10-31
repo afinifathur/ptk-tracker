@@ -13,7 +13,10 @@
       @csrf
       <input type="file" name="file" accept=".xlsx,.csv,.txt" required class="border p-2 rounded">
       <button class="px-3 py-2 bg-amber-700 text-white rounded">Upload</button>
-      <a class="underline" href="{{ asset('storage/templates/ptk_import_template.csv') }}" target="_blank">Download Template CSV</a>
+      <a class="underline text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
+         href="{{ asset('storage/templates/ptk_import_template.csv') }}" target="_blank">
+        Download Template CSV
+      </a>
     </form>
   </div>
 
@@ -28,7 +31,7 @@
     <button class="px-3 py-2 bg-gray-800 text-white rounded">Filter</button>
   </form>
 
-  <table id="ptkTable" class="display w-full text-sm">
+  <table id="ptkTable" class="display stripe hover order-column w-full text-sm js-dt">
     <thead>
       <tr>
         <th>Nomor</th>
@@ -45,15 +48,16 @@
     <tbody>
       @forelse($ptks as $p)
         <tr>
-          {{-- Nomor (tanpa link) --}}
+          {{-- Nomor --}}
           <td>{{ $p->number ?? '—' }}</td>
 
-          {{-- Tanggal (nowrap) --}}
+          {{-- Tanggal --}}
           <td class="whitespace-nowrap">{{ optional($p->created_at)->format('Y-m-d') }}</td>
 
-          {{-- Judul (link ke detail) --}}
+          {{-- Judul (link ke detail, abu-abu elegan) --}}
           <td class="truncate max-w-[280px]">
-            <a href="{{ route('ptk.show', $p) }}" class="underline">
+            <a href="{{ route('ptk.show', $p) }}"
+               class="font-medium block text-gray-800 dark:text-gray-100 hover:text-gray-900 dark:hover:text-gray-50 underline decoration-gray-300 hover:decoration-gray-400">
               {{ $p->title }}
             </a>
           </td>
@@ -74,12 +78,19 @@
             <x-ui.stat-badge :status="$s" />
           </td>
 
-          {{-- Due (nowrap) --}}
+          {{-- Due --}}
           <td class="whitespace-nowrap">{{ optional($p->due_date)->format('Y-m-d') }}</td>
 
+          {{-- Aksi (link abu-abu netral) --}}
           <td class="space-x-2">
-            <a href="{{ route('ptk.edit', $p) }}" class="text-blue-600 underline">Edit</a>
-            <a href="{{ route('exports.pdf', $p) }}" class="text-gray-700 underline">PDF</a>
+            <a href="{{ route('ptk.edit', $p) }}"
+               class="text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 underline decoration-gray-300 hover:decoration-gray-400">
+              Edit
+            </a>
+            <a href="{{ route('exports.pdf', $p) }}"
+               class="text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 underline decoration-gray-300 hover:decoration-gray-400">
+              PDF
+            </a>
           </td>
         </tr>
       @empty

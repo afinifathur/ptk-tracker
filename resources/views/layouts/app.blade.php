@@ -10,18 +10,33 @@
   {{-- Vite assets --}}
   @vite(['resources/css/app.css','resources/js/app.js'])
 
-  {{-- Vendor CSS/JS (global) --}}
-  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
-  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-
-  {{-- Alpine MUST be deferred --}}
-  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  {{-- Vendor CSS (lokal) --}}
+  {{-- 1) CSS dasar DataTables (wajib untuk garis/striping default) --}}
+  <link rel="stylesheet" href="{{ asset('vendor/datatables/jquery.dataTables.min.css') }}">
+  {{-- 2) Skin Bootstrap 5 untuk DataTables (opsional, tambahkan komponen bs seperti paging) --}}
+  <link rel="stylesheet" href="{{ asset('vendor/datatables/dataTables.bootstrap5.min.css') }}">
+  {{-- 3) Bootstrap 5 --}}
+  <link rel="stylesheet" href="{{ asset('vendor/bootstrap5/bootstrap.min.css') }}">
 
   {{-- Sembunyikan elemen ber-x-cloak sampai Alpine siap --}}
   <style>[x-cloak]{display:none !important;}</style>
+
+  {{-- Sentuhan kecil agar nuansa abu-abu tetap rapi & minimalis --}}
+  <style>
+    /* Header tabel sedikit tebal dan abu-abu lembut */
+    table.dataTable thead th { font-weight: 600; }
+    /* Pastikan garis sel terlihat jelas (kalem) */
+    table.dataTable thead th, table.dataTable tbody td {
+      border-color: #e5e7eb; /* Tailwind gray-200 */
+    }
+    /* Hover baris lembut */
+    table.dataTable tbody tr:hover { background-color: #f9fafb; }
+    /* Navbar link: abu-abu elegan */
+    .topnav a { color: #374151; }                 /* gray-700 */
+    .topnav a:hover { color: #111827; }           /* gray-900 */
+    .dark .topnav a { color: #e5e7eb; }           /* gray-200 */
+    .dark .topnav a:hover { color: #f9fafb; }     /* gray-50 */
+  </style>
 </head>
 <body class="h-full bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
   <div class="max-w-7xl mx-auto p-6">
@@ -32,13 +47,12 @@
     <header class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold">PTK Tracker</h1>
 
-      {{-- NAV --}}
-      <nav class="hidden md:flex space-x-4">
+      {{-- NAV (tetap gaya abu-abu minimalis) --}}
+      <nav class="topnav hidden md:flex space-x-4">
         <a href="{{ route('dashboard') }}">Dashboard</a>
         <a href="{{ route('ptk.index') }}">Daftar PTK</a>
         <a href="{{ route('ptk.kanban') }}">Kanban</a>
 
-        {{-- New PTK: sembunyikan khusus Direktur (Auditor memang tak punya permission) --}}
         @can('ptk.create')
           @unlessrole('director')
             <a href="{{ route('ptk.create') }}">New PTK</a>
@@ -46,7 +60,7 @@
         @endcan
 
         @can('menu.queue')
-          <a href="{{ route('ptk.queue') }}">Antrian Persetujuan</a>
+          <a href="{{ route('ptk.queue') }}">Recycle Bin</a>
         @endcan
 
         @can('menu.recycle')
@@ -59,7 +73,6 @@
           <a href="{{ route('exports.audits.index') }}">Audit Log</a>
         @endcan
 
-        {{-- ✅ Settings: tampil untuk Direktur + Kabag QC + Manager HR + Admin QC Flange/Fitting + HR + K3 --}}
         @hasanyrole('director|kabag_qc|manager_hr|admin_qc_flange|admin_qc_fitting|admin_hr|admin_k3')
           <a href="{{ route('settings.categories') }}">Settings</a>
         @endhasanyrole
@@ -113,9 +126,21 @@
 
   @stack('scripts')
 
-  {{-- Uji cepat Alpine (sementara): bukalah Console dan refresh, harus log "Alpine OK" --}}
-  <script>
-    document.addEventListener('alpine:init', () => console.log('Alpine OK'));
-  </script>
+  {{-- JS lokal (urutan penting) --}}
+  <script src="{{ asset('vendor/polyfill/polyfill.min.js') }}"></script>
+  <script src="{{ asset('vendor/jquery/jquery.min.js') }}"></script>
+  <script src="{{ asset('vendor/bootstrap5/bootstrap.bundle.min.js') }}"></script>
+
+  {{-- DataTables core + adaptor Bootstrap --}}
+  <script src="{{ asset('vendor/datatables/jquery.dataTables.min.js') }}"></script>
+  <script src="{{ asset('vendor/datatables/dataTables.bootstrap5.min.js') }}"></script>
+
+  {{-- Chart.js, Sortable, Alpine --}}
+  <script src="{{ asset('vendor/chartjs/chart.umd.min.js') }}"></script>
+  <script src="{{ asset('vendor/sortable/Sortable.min.js') }}"></script>
+  <script src="{{ asset('vendor/alpine/alpine.min.js') }}" defer></script>
+
+  {{-- Uji cepat Alpine --}}
+  <script>document.addEventListener('alpine:init', () => console.log('Alpine OK'));</script>
 </body>
 </html>
