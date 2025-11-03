@@ -11,7 +11,7 @@
     $topDepartments   = $topDepartments   ?? collect();
     $topSubcategories = $topSubcategories ?? collect();
 
-    // ===== Filters in-use (ambil dari $selected -> $data -> request) =====
+    // ===== Filters in-use =====
     $filters = [
       'start'          => $start ?? ($data['start'] ?? request('start')),
       'end'            => $end   ?? ($data['end']   ?? request('end')),
@@ -21,7 +21,7 @@
       'status'         => $selected['status']         ?? ($data['status']         ?? request('status')),
     ];
 
-    // ===== Labels ringkasan (pakai meta jika ada; fallback dari lookup) =====
+    // ===== Labels ringkasan =====
     $metaCategory   = ($category_name    ?? null);
     $metaSubcat     = ($subcategory_name ?? null);
     $metaDept       = ($department_name  ?? null);
@@ -54,7 +54,7 @@
     </div>
 
     <div class="space-x-2">
-      {{-- Form export Excel: kirim SEMUA filter --}}
+      {{-- Form export Excel --}}
       <form method="POST" action="{{ route('exports.range.excel') }}" class="inline">
         @csrf
         <input type="hidden" name="start" value="{{ $filters['start'] }}">
@@ -66,7 +66,7 @@
         <button class="px-3 py-2 bg-green-600 text-white rounded">Export Excel</button>
       </form>
 
-      {{-- Form export PDF: kirim SEMUA filter --}}
+      {{-- Form export PDF --}}
       <form method="POST" action="{{ route('exports.range.pdf') }}" class="inline">
         @csrf
         <input type="hidden" name="start" value="{{ $filters['start'] }}">
@@ -117,44 +117,46 @@
   </div>
 
   {{-- ===== Tabel hasil ===== --}}
-  <table class="display w-full text-sm">
-    <thead>
-      <tr>
-        <th>Nomor</th>
-        <th>Judul</th>
-        <th>Kategori</th>
-        <th>Subkategori</th>
-        <th>Departemen</th>
-        <th>PIC</th>
-        <th>Status</th>
-        <th>Due</th>
-        <th>Dibuat</th>
-      </tr>
-    </thead>
-    <tbody>
-      @forelse($items as $p)
+  <div class="table-responsive">
+    <table class="table table-striped table-hover align-middle w-full text-sm" id="myTable">
+      <thead class="table-light">
         <tr>
-          <td>{{ $p->number ?? '—' }}</td>
-          <td class="truncate max-w-[320px]">{{ $p->title }}</td>
-          <td>{{ $p->category->name ?? '-' }}</td>
-          <td>{{ $p->subcategory->name ?? '-' }}</td>
-          <td>{{ $p->department->name ?? '-' }}</td>
-          <td>{{ $p->pic->name ?? '-' }}</td>
-          <td>{{ $p->status }}</td>
-          <td class="whitespace-nowrap">{{ optional($p->due_date)->format('Y-m-d') }}</td>
-          <td class="whitespace-nowrap">{{ optional($p->created_at)->format('Y-m-d') }}</td>
+          <th>Nomor</th>
+          <th>Judul</th>
+          <th>Kategori</th>
+          <th>Subkategori</th>
+          <th>Departemen</th>
+          <th>PIC</th>
+          <th>Status</th>
+          <th>Due</th>
+          <th>Dibuat</th>
         </tr>
-      @empty
-        <tr>
-          <td colspan="9" class="text-center text-gray-500 py-4">Tidak ada data untuk rentang ini.</td>
-        </tr>
-      @endforelse
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+        @forelse($items as $p)
+          <tr>
+            <td>{{ $p->number ?? '—' }}</td>
+            <td class="truncate max-w-[320px]">{{ $p->title }}</td>
+            <td>{{ $p->category->name ?? '-' }}</td>
+            <td>{{ $p->subcategory->name ?? '-' }}</td>
+            <td>{{ $p->department->name ?? '-' }}</td>
+            <td>{{ $p->pic->name ?? '-' }}</td>
+            <td>{{ $p->status }}</td>
+            <td class="whitespace-nowrap">{{ optional($p->due_date)->format('Y-m-d') }}</td>
+            <td class="whitespace-nowrap">{{ optional($p->created_at)->format('Y-m-d') }}</td>
+          </tr>
+        @empty
+          <tr>
+            <td colspan="9" class="text-center text-gray-500 py-4">Tidak ada data untuk rentang ini.</td>
+          </tr>
+        @endforelse
+      </tbody>
+    </table>
+  </div>
 
   <script>
     $(function () {
-      $('table.display').DataTable({
+      $('#myTable').DataTable({
         pageLength: 25,
         order: [[8, 'desc']], // urutkan berdasarkan kolom "Dibuat"
         language: { search: "_INPUT_", searchPlaceholder: "Cari di laporan..." },
