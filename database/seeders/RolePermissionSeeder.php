@@ -8,17 +8,18 @@ use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\PermissionRegistrar;
 use App\Models\User;
+use App\Models\Department;
 
 class RolePermissionSeeder extends Seeder
 {
     public function run(): void
     {
-        // Bersihkan cache permission Spatie (penting)
+        // 0) Reset cache spatie (sebelum & sesudah perubahan)
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         $guard = config('auth.defaults.guard', 'web');
 
-        // ==== 1) Daftar role ====
+        // 1) Definisi role
         $roles = [
             'admin_qc',
             'admin_qc_flange',
@@ -31,91 +32,117 @@ class RolePermissionSeeder extends Seeder
             'auditor',
         ];
 
-        // ==== 2) Permissions yang dipakai UI (sesuai instruksi) ====
-        $uiPerms = [
-            'ptk.create','ptk.update','ptk.delete',
-            'ptk.view','ptk.export',           // penting untuk detail & preview/unduh
-            'menu.queue','menu.recycle','menu.settings',
-            'menu.audit',
+        // 2) Definisi permission dasar
+        $adminPerms = [
+            'ptk.create','ptk.update','ptk.delete','ptk.view','ptk.export','menu.settings',
         ];
+        $approverExtra = ['ptk.approve','ptk.reject','menu.queue'];
+        $extraDirector = ['menu.recycle','menu.audit','ptk.restore','ptk.force'];
+        $otherMenu = ['menu.queue','menu.recycle','menu.audit']; // untuk konsistensi UI
 
-        // ==== 3) Matrix role -> permissions ====
-        $matrix = [
-            // role admin (disamakan)
-            'admin_qc'         => ['ptk.create','ptk.update','ptk.delete','ptk.view','ptk.export','menu.queue','menu.recycle','menu.settings'],
-            'admin_qc_flange'  => ['ptk.create','ptk.update','ptk.delete','ptk.view','ptk.export','menu.queue','menu.recycle','menu.settings'],
-            'admin_qc_fitting' => ['ptk.create','ptk.update','ptk.delete','ptk.view','ptk.export','menu.queue','menu.recycle','menu.settings'],
-            'admin_hr'         => ['ptk.create','ptk.update','ptk.delete','ptk.view','ptk.export','menu.queue','menu.recycle','menu.settings'],
-            'admin_k3'         => ['ptk.create','ptk.update','ptk.delete','ptk.view','ptk.export','menu.queue','menu.recycle','menu.settings'],
-
-            // non-admin
-            'kabag_qc'         => ['ptk.view','ptk.approve','menu.queue'],
-            'manager_hr'       => ['ptk.view','ptk.approve','menu.queue'],
-            'director'         => '*', // semua permission
-            'auditor'          => ['ptk.view','menu.audit'],
-        ];
-
-        // ==== 4) Bangun daftar permission final: UI + yang ada di matrix ====
-        $matrixPerms = collect($matrix)
-            ->flatMap(fn($permList) => $permList === '*' ? [] : $permList)
+        // 3) Kumpulan permission akhir yang dipastikan terdaftar
+        $allNamedPerms = collect()
+            ->merge($adminPerms)
+            ->merge($approverExtra)
+            ->merge($extraDirector)
+            ->merge($otherMenu)
             ->unique()
             ->values();
 
-        $permissions = collect($uiPerms)
-            ->merge($matrixPerms)
-            ->unique()
-            ->values()
-            ->all();
+        // 4) Mapping role → permission (tanpa cakupan departemen)
+        $roleMatrix = [
+            'admin_qc'         => array_values(array_unique(array_merge($adminPerms, $otherMenu))),
+            'admin_qc_flange'  => array_values(array_unique(array_merge($adminPerms, $otherMenu))),
+            'admin_qc_fitting' => array_values(array_unique(array_merge($adminPerms, $otherMenu))),
+            'admin_hr'         => array_values(array_unique(array_merge($adminPerms, $otherMenu))),
+            'admin_k3'         => array_values(array_unique(array_merge($adminPerms, $otherMenu))),
 
-        // ==== 5) Buat role & permission, lalu assign ====
-        DB::transaction(function () use ($guard, $roles, $permissions, $matrix) {
-            // Buat semua permissions (hindari mismatch key)
+            'kabag_qc'         => array_values(array_unique(array_merge($adminPerms, $approverExtra))),
+            'manager_hr'       => array_values(array_unique(array_merge($adminPerms, $approverExtra))),
+
+            'director'         => '*', // semua permission terdaftar (plus nanti dept-scope)
+            'auditor'          => ['ptk.view','ptk.export','menu.audit'],
+        ];
+
+        // 5) Konfigurasi cakupan departemen (SESUAIKAN nama persis di DB)
+        $deptNamesForKabag = ['QC FLANGE','QC FITTING'];
+        $deptNamesForMgrHr = ['HR DAN K3']; // pisahkan ke ['HR','K3'] jika di DB terpisah
+
+        DB::transaction(function () use (
+            $guard, $roles, $allNamedPerms, $roleMatrix,
+            $deptNamesForKabag, $deptNamesForMgrHr
+        ) {
+            // 5.1) Pastikan semua Permission bernama dibuat
             $permMap = [];
-            foreach ($permissions as $p) {
-                $permMap[$p] = Permission::firstOrCreate([
-                    'name' => $p,
-                    'guard_name' => $guard,
-                ]);
+            foreach ($allNamedPerms as $name) {
+                $permMap[$name] = Permission::firstOrCreate(
+                    ['name' => $name, 'guard_name' => $guard]
+                );
             }
 
-            // Buat semua roles
+            // 5.2) Pastikan semua Role dibuat
             $roleMap = [];
             foreach ($roles as $r) {
-                $roleMap[$r] = Role::firstOrCreate([
-                    'name' => $r,
-                    'guard_name' => $guard,
-                ]);
+                $roleMap[$r] = Role::firstOrCreate(
+                    ['name' => $r, 'guard_name' => $guard]
+                );
             }
 
-            // Assign permissions sesuai matrix
-            foreach ($matrix as $roleName => $permList) {
+            // 5.3) Assign permission bernama sesuai matrix (belum termasuk view-dept-*)
+            foreach ($roleMatrix as $roleName => $permList) {
+                /** @var \Spatie\Permission\Models\Role|null $role */
                 $role = $roleMap[$roleName] ?? null;
-                if (!$role) {
-                    continue;
-                }
+                if (!$role) continue;
 
                 if ($permList === '*') {
-                    // Director: semua permission yang sudah terdaftar
+                    // Director: semua permission bernama yang sudah dibuat
                     $role->syncPermissions(Permission::where('guard_name', $guard)->get());
                 } else {
-                    // Map aman: hanya ambil permission yang sudah dibuat
                     $assign = collect($permList)
-                        ->map(fn($name) => $permMap[$name] ?? null)
+                        ->map(fn($n) => $permMap[$n] ?? null)
                         ->filter()
                         ->values()
                         ->all();
-
                     $role->syncPermissions($assign);
                 }
             }
+
+            // 5.4) Buat permission cakupan departemen: view-dept-{id} dan assign ke role terkait
+            $kabagDeptIds = Department::whereIn('name', $deptNamesForKabag)->pluck('id');
+            $mgrDeptIds   = Department::whereIn('name', $deptNamesForMgrHr)->pluck('id');
+
+            $makeDeptPerm = function (int $deptId) use ($guard) {
+                return Permission::firstOrCreate([
+                    'name' => "view-dept-{$deptId}",
+                    'guard_name' => $guard,
+                ]);
+            };
+
+            $kabagDeptPerms = $kabagDeptIds->map(fn ($id) => $makeDeptPerm($id))->all();
+            $mgrDeptPerms   = $mgrDeptIds->map(fn ($id) => $makeDeptPerm($id))->all();
+
+            // givePermissionTo bisa nerima array/collection Permission model
+            if (isset($roleMap['kabag_qc'])) {
+                $roleMap['kabag_qc']->givePermissionTo($kabagDeptPerms);
+            }
+            if (isset($roleMap['manager_hr'])) {
+                $roleMap['manager_hr']->givePermissionTo($mgrDeptPerms);
+            }
+
+            // Opsional: Director bisa melihat semua departemen (beri semua view-dept-*)
+            if (isset($roleMap['director'])) {
+                $allDeptIds = Department::pluck('id');
+                $allDeptPerms = $allDeptIds->map(fn ($id) => $makeDeptPerm($id))->all();
+                $roleMap['director']->givePermissionTo($allDeptPerms);
+            }
         });
 
-        // ==== 6) Fallback: user tanpa role => director ====
+        // 6) Fallback: user tanpa role → director
         User::query()
             ->doesntHave('roles')
-            ->each(fn(User $u) => $u->assignRole('director'));
+            ->each(fn (User $u) => $u->assignRole('director'));
 
-        // Bersihkan cache lagi setelah perubahan
+        // 7) Reset cache lagi
         app(PermissionRegistrar::class)->forgetCachedPermissions();
     }
 }

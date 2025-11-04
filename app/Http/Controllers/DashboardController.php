@@ -12,17 +12,16 @@ class DashboardController extends Controller
     {
         $user = auth()->user();
 
-        // ===============================
         // Periode 26 minggu ke belakang
-        // ===============================
-        $from = now()->copy()->subWeeks(26)->startOfWeek(); // mulai Senin (ISO)
-        $to   = now();                                      // saat ini
+        $from = now()->copy()->subWeeks(26)->startOfWeek(); // Senin (ISO)
+        $to   = now();
 
-        // Base query harus lewat scope visibleTo
-        $base = PTK::visibleTo($user)->with(['department', 'category', 'subcategory']);
+        // Satu pintu: semua data lewat scope visibleTo()
+        $base = PTK::query()
+            ->visibleTo($user);
 
         // ===============================
-        // KPI Ringkas (tetap pakai status/due_date)
+        // KPI ringkas
         // ===============================
         $total      = (clone $base)->count();
         $completed  = (clone $base)->where('status', 'Completed')->count();
@@ -33,15 +32,14 @@ class DashboardController extends Controller
             ->count();
 
         // ===============================
-        // Tren Mingguan (26 minggu) — basis: form_date
+        // Tren mingguan (26 minggu) — basis: form_date
         // ===============================
         $seriesRaw = (clone $base)
             ->whereBetween('form_date', [$from->toDateString(), $to->toDateString()])
             ->selectRaw('YEARWEEK(form_date, 3) as yw, COUNT(*) as c')
             ->groupBy('yw')
-            ->pluck('c', 'yw'); // ex: [202401 => 5, 202402 => 3, ...]
+            ->pluck('c', 'yw'); // contoh: [202401 => 5, 202402 => 3, ...]
 
-        // daftar minggu dari $from..$to (langkah 1 minggu)
         $weeks = collect(CarbonPeriod::create($from, '1 week', $to))
             ->map(fn ($w) => $w->copy()->startOfWeek());
 
@@ -50,30 +48,30 @@ class DashboardController extends Controller
 
         foreach ($weeks as $week) {
             // kunci kompatibel dengan YEARWEEK(...,3)
-            $yw = (int)$week->format('oW'); // contoh '202501' -> 202501
-            $labels[] = $week->format('W'); // label "01".."53"
-            $data[] = (int)($seriesRaw[$yw] ?? 0);
+            $yw = (int) $week->format('oW'); // contoh '202501' -> 202501
+            $labels[] = $week->format('W');  // label "01".."53"
+            $data[] = (int) ($seriesRaw[$yw] ?? 0);
         }
 
         // ===============================
         // Penanda bulan (ID) untuk chart — basis: form_date
         // ===============================
-        $indoMonths = [1 => 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nop', 'Des'];
+        $indoMonths = [1 => 'Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nop','Des'];
         $monthMarks = [];
         $prevMonth  = null;
 
         foreach ($weeks as $week) {
-            $m = (int)$week->format('n');
+            $m = (int) $week->format('n');
             if ($m !== $prevMonth) {
                 $monthMarks[] = $indoMonths[$m];
-                $prevMonth    = $m;
+                $prevMonth = $m;
             } else {
                 $monthMarks[] = '';
             }
         }
 
         // ===============================
-        // SLA 6 Bulan (Completed On Time) — TIDAK berubah
+        // SLA 6 bulan (Completed On Time)
         // ===============================
         $slaBase   = (clone $base)
             ->whereBetween('created_at', [$from, $to])
@@ -84,11 +82,12 @@ class DashboardController extends Controller
         $slaPct    = $slaTotal ? round($slaOnTime * 100 / $slaTotal, 1) : 0;
 
         // ===============================
-        // Top 3 Department, Category, Subcategory (6 Bulan)
+        // Top 3 Department, Category, Subcategory (6 bulan)
         // ===============================
         $base6 = (clone $base)->whereBetween('created_at', [$from, $to]);
 
         $topDepartments = (clone $base6)
+            ->with('department:id,name')
             ->selectRaw('department_id, COUNT(*) as total')
             ->groupBy('department_id')
             ->orderByDesc('total')
@@ -96,10 +95,11 @@ class DashboardController extends Controller
             ->get()
             ->map(fn ($r) => [
                 'name'  => $r->department->name ?? '-',
-                'total' => (int)$r->total,
+                'total' => (int) $r->total,
             ]);
 
         $topCategories = (clone $base6)
+            ->with('category:id,name')
             ->selectRaw('category_id, COUNT(*) as total')
             ->groupBy('category_id')
             ->orderByDesc('total')
@@ -107,10 +107,11 @@ class DashboardController extends Controller
             ->get()
             ->map(fn ($r) => [
                 'name'  => $r->category->name ?? '-',
-                'total' => (int)$r->total,
+                'total' => (int) $r->total,
             ]);
 
         $topSubcategories = (clone $base6)
+            ->with('subcategory:id,name')
             ->whereNotNull('subcategory_id')
             ->selectRaw('subcategory_id, COUNT(*) as total')
             ->groupBy('subcategory_id')
@@ -119,14 +120,19 @@ class DashboardController extends Controller
             ->get()
             ->map(fn ($r) => [
                 'name'  => $r->subcategory->name ?? '-',
-                'total' => (int)$r->total,
+                'total' => (int) $r->total,
             ]);
 
         // ===============================
-        // Overdue PTK (Top 10) — TIDAK berubah
+        // Overdue PTK (Top 10)
         // ===============================
         $overdueTop = (clone $base)
-            ->with(['pic:id,name', 'department:id,name', 'category:id,name', 'subcategory:id,name'])
+            ->with([
+                'pic:id,name',
+                'department:id,name',
+                'category:id,name',
+                'subcategory:id,name',
+            ])
             ->where('status', '!=', 'Completed')
             ->whereDate('due_date', '<', today())
             ->orderBy('due_date') // paling lama di atas

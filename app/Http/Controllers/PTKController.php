@@ -33,29 +33,10 @@ class PTKController extends Controller
     # =========================================================
     public function index(Request $request): View
     {
-        $q = PTK::visibleTo($request->user())
-            ->with([
-                'pic:id,name',
-                'department:id,name',
-                'category:id,name',
-                'subcategory:id,name',
-                'creator:id,name',
-            ])
-            ->latest();
-
-        $q->when($request->filled('status'), fn ($w) =>
-            $w->where('status', $request->string('status'))
-        );
-
-        $q->when($request->filled('q'), function ($w) use ($request) {
-            $term = trim((string) $request->q);
-            $w->where(fn ($s) =>
-                $s->where('title', 'like', "%{$term}%")
-                  ->orWhere('number', 'like', "%{$term}%")
-            );
-        });
-
-        $ptks = $q->paginate(self::PER_PAGE)->withQueryString();
+        $ptks = PTK::with(['department','category','subcategory','pic'])
+            ->visibleTo(auth()->user())
+            ->latest('created_at')
+            ->paginate(self::PER_PAGE);
 
         return view('ptk.index', compact('ptks'));
     }
@@ -75,9 +56,8 @@ class PTKController extends Controller
     # =========================================================
     public function store(Request $request): RedirectResponse
     {
-        // validasi (form_date wajib) — tidak lagi membatasi department via DeptScope
+        // validasi (form_date wajib) — tidak membatasi department via DeptScope
         $data = $this->validatePayload($request);
-
         $data['created_by'] = $request->user()->id;
 
         // simpan (form_date ikut mass-assign)
@@ -120,7 +100,7 @@ class PTKController extends Controller
     # =========================================================
     public function update(Request $request, PTK $ptk): RedirectResponse
     {
-        // validasi (form_date wajib) — tidak lagi membatasi department via DeptScope
+        // validasi (form_date wajib)
         $data = $this->validatePayload($request);
 
         // Auto-move ke In Progress saat evaluation terisi dan status masih Not Started
@@ -157,26 +137,24 @@ class PTKController extends Controller
     # =========================================================
     public function kanban(): View
     {
-        $user = auth()->user();
-
-        $base = PTK::visibleTo($user)
-            ->with(['department:id,name','category:id,name','pic:id,name']);
+        $base = PTK::with(['department','pic'])
+            ->visibleTo(auth()->user());
 
         $notStarted = (clone $base)
-            ->where('status', 'Not Started')
-            ->orderBy('form_date', 'asc')
+            ->where('status','Not Started')
+            ->orderBy('created_at')
             ->limit(self::KANBAN_LIMIT)
             ->get();
 
         $inProgress = (clone $base)
-            ->where('status', 'In Progress')
-            ->orderBy('form_date', 'asc')
+            ->where('status','In Progress')
+            ->orderBy('created_at')
             ->limit(self::KANBAN_LIMIT)
             ->get();
 
-        $completed = (clone $base)
-            ->where('status', 'Completed')
-            ->orderByRaw('COALESCE(approved_at, updated_at, created_at) DESC')
+        $completed  = (clone $base)
+            ->where('status','Completed')
+            ->latest()
             ->limit(self::KANBAN_LIMIT)
             ->get();
 
@@ -197,19 +175,18 @@ class PTKController extends Controller
     }
 
     # =========================================================
-    # QUEUE — PTK Completed tanpa nomor (pakai visibleTo)
+    # QUEUE — antrian persetujuan (pakai visibleTo)
     # =========================================================
     public function queue(Request $request): View
     {
-        $q = PTK::visibleTo($request->user())
-            ->with(['pic:id,name', 'department:id,name'])
-            ->where('status', 'Completed')
-            ->whereNull('number')
-            ->latest();
+        $queue = PTK::with(['department','pic'])
+            ->visibleTo(auth()->user())
+            ->where('status','Completed')
+            ->whereNull('number')      // belum dinomori = belum approve
+            ->latest('updated_at')
+            ->get();
 
-        $items = $q->paginate(self::PER_PAGE)->withQueryString();
-
-        return view('ptk.queue', compact('items'));
+        return view('ptk.queue', compact('queue'));
     }
 
     # =========================================================
@@ -217,13 +194,13 @@ class PTKController extends Controller
     # =========================================================
     public function recycle(Request $request): View
     {
-        $q = PTK::onlyTrashed()
-            ->visibleTo($request->user())
-            ->latest('deleted_at');
+        $trash = PTK::onlyTrashed()
+            ->visibleTo(auth()->user())
+            ->with(['department','pic'])
+            ->latest('deleted_at')
+            ->get();
 
-        $items = $q->paginate(self::PER_PAGE)->withQueryString();
-
-        return view('ptk.recycle', compact('items'));
+        return view('ptk.recycle', compact('trash'));
     }
 
     public function restore(Request $request, string $id): RedirectResponse
@@ -309,8 +286,7 @@ class PTKController extends Controller
 
     private function validatePayload(Request $request): array
     {
-        // Tidak lagi menambah Rule::in($allowed) pada department_id,
-        // agar sesuai dengan form yang membebaskan pilihan departemen.
+        // Tidak menambah Rule::in($allowed) pada department_id (pilihan bebas).
         return $request->validate($this->rules());
     }
 

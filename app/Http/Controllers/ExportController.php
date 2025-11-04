@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\{PTK, Department, Category, Subcategory};
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
@@ -13,15 +14,23 @@ use Carbon\Carbon;
 class ExportController extends Controller
 {
     /**
-     * Bangun query laporan range yang SUDAH terfilter visibilitas user.
-     * (Periode kini berbasis form_date)
+     * Basis builder: selalu include relasi penting dan filter visibilitas user.
      */
-    private function buildRangeQuery(Request $r)
+    private function base(): Builder
     {
-        $q = PTK::visibleTo($r->user())
-            ->with(['category','subcategory','department','pic']);
+        return PTK::with(['department','category','subcategory','pic'])
+            ->visibleTo(auth()->user());
+    }
 
-        // Ambil input periode (string tanggal Y-m-d) lalu filter dengan form_date
+    /**
+     * Bangun query laporan range yang SUDAH terfilter visibilitas user.
+     * (Periode berbasis form_date)
+     */
+    private function buildRangeQuery(Request $r): Builder
+    {
+        $q = (clone $this->base());
+
+        // Periode (form_date)
         $start = $r->input('start');
         $end   = $r->input('end');
 
@@ -38,7 +47,7 @@ class ExportController extends Controller
         if ($r->filled('subcategory_id')) $q->where('subcategory_id', $r->subcategory_id);
         if ($r->filled('department_id'))  $q->where('department_id', $r->department_id);
 
-        // Status (termasuk Overdue) — tetap pakai due_date/status
+        // Status (termasuk Overdue) — pakai due_date/status
         if ($r->filled('status')) {
             if ($r->status === 'Overdue') {
                 $q->where('status', '!=', 'Completed')
@@ -66,8 +75,7 @@ class ExportController extends Controller
     /** 🔹 Export SELURUH PTK yang terlihat oleh user ke Excel (bukan range) */
     public function excel(Request $request)
     {
-        $items = PTK::visibleTo($request->user())
-            ->with(['category','subcategory','department','pic'])
+        $items = (clone $this->base())
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -103,16 +111,13 @@ class ExportController extends Controller
     /** 🔹 PREVIEW satu PTK (inline stream) */
     public function preview(PTK $ptk)
     {
-        // izin sama seperti view/download
         $this->authorize('download', $ptk);
 
-        // muat relasi yang dibutuhkan PDF
         $ptk->load([
             'attachments', 'pic', 'department', 'category', 'subcategory',
             'creator', 'approver', 'director',
         ]);
 
-        // hash dokumen untuk QR verifikasi
         $docHash = hash('sha256', json_encode([
             'id'          => $ptk->id,
             'number'      => $ptk->number,
@@ -130,13 +135,11 @@ class ExportController extends Controller
             $qrBase64 = null;
         }
 
-        // logo & tanda tangan (opsional)
         $companyLogoBase64 = $this->b64(public_path('brand/logo.png'));
         $signAdmin    = $this->b64(public_path('brand/signatures/admin.png'));
         $signApprover = $this->b64(public_path('brand/signatures/approver.png'));
         $signDirector = $this->b64(public_path('brand/signatures/director.png'));
 
-        // embed gambar lampiran (maks 6)
         $embeds = [];
         foreach ($ptk->attachments->take(6) as $att) {
             $mime = strtolower($att->mime ?? '');
@@ -164,7 +167,7 @@ class ExportController extends Controller
         $pdf->set_option('defaultFont', 'DejaVu Sans');
 
         $name = preg_replace('/[\/\\\\]+/', '-', $ptk->number ?: 'PTK-'.$ptk->id) . '.pdf';
-        return $pdf->stream($name); // inline / tab baru
+        return $pdf->stream($name);
     }
 
     /** 🔹 DOWNLOAD satu PTK (PDF) */
@@ -239,11 +242,11 @@ class ExportController extends Controller
         return view('exports.range_form', compact('categories', 'departments', 'subcategories'));
     }
 
-    // ====== RANGE REPORT — pakai buildRangeQuery (sudah visibleTo & pakai form_date) ======
+    // ====== RANGE REPORT — pakai buildRangeQuery (visibleTo & form_date) ======
     public function rangeReport(Request $r)
     {
         $items = $this->buildRangeQuery($r)
-            ->orderBy('form_date','desc')   // urutkan berbasis form_date
+            ->orderBy('form_date','desc')
             ->get();
 
         return view('exports.range_report', [
@@ -262,7 +265,7 @@ class ExportController extends Controller
         ] + $this->rangeMeta($r));
     }
 
-    // ====== RANGE PDF — pakai buildRangeQuery (sudah visibleTo & pakai form_date) ======
+    // ====== RANGE PDF — pakai buildRangeQuery (visibleTo & form_date) ======
     public function rangePdf(Request $r)
     {
         $items = $this->buildRangeQuery($r)
@@ -281,7 +284,7 @@ class ExportController extends Controller
         return $pdf->download($fname);
     }
 
-    // ====== RANGE EXCEL — pakai buildRangeQuery (sudah visibleTo & pakai form_date) ======
+    // ====== RANGE EXCEL — pakai buildRangeQuery (visibleTo & form_date) ======
     public function rangeExcel(Request $r)
     {
         $items = $this->buildRangeQuery($r)

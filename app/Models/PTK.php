@@ -22,7 +22,6 @@ class PTK extends Model implements AuditableContract
 
     /**
      * Kolom yang boleh diisi mass assignment.
-     * (pastikan department_id & pic_user_id ter-cover)
      */
     protected $fillable = [
         'number',
@@ -79,14 +78,14 @@ class PTK extends Model implements AuditableContract
     ];
 
     // =====================================================================
-    // CONSTANTS (opsional, membantu konsistensi)
+    // CONSTANTS
     // =====================================================================
     public const STATUS_NOT_STARTED = 'Not Started';
     public const STATUS_IN_PROGRESS = 'In Progress';
     public const STATUS_DONE        = 'Done';
 
     // =====================================================================
-    // MUTATOR — number immutable (kalau sudah ada, jangan ditimpa)
+    // MUTATORS
     // =====================================================================
     public function setNumberAttribute($value): void
     {
@@ -101,41 +100,34 @@ class PTK extends Model implements AuditableContract
     // =====================================================================
 
     /**
-     * Scope visibilitas generik berdasarkan role TANPA mengunci departemen saat create.
+     * Satu pintu filter: visibilitas berdasarkan role & permission view-dept-{id}.
      *
      * Aturan:
-     * - director / auditor  => lihat semua
-     * - role admin (admin_qc_flange, admin_qc_fitting, admin_hr, admin_k3, kabag_qc, manager_hr)
-     *     => lihat (PTK yang dia PIC/creator) ATAU (PTK di departemen user)
-     * - lainnya => hanya (PIC/creator)
+     * - director & auditor => lihat semua.
+     * - lainnya => selalu boleh lihat yang jadi PIC (pic_user_id == user.id),
+     *   dan (jika punya) boleh lihat yang department_id ada di permission "view-dept-{id}".
      */
     public function scopeVisibleTo(Builder $q, User $user): Builder
     {
-        // 1) Full access
-        if ($user->hasAnyRole(['director', 'auditor', 'superadmin'])) {
+        // Director & Auditor: full access
+        if ($user->hasAnyRole(['director', 'auditor'])) {
             return $q;
         }
 
-        // 2) Admin/manager level (akses gabungan: PIC/creator OR department user)
-        if ($user->hasAnyRole([
-            'kabag_qc',
-            'manager_hr',
-            'admin_qc_flange',
-            'admin_qc_fitting',
-            'admin_hr',
-            'admin_k3',
-        ])) {
-            return $q->where(function (Builder $qq) use ($user) {
-                $qq->where('pic_user_id', $user->id)
-                   ->orWhere('created_by', $user->id)
-                   ->orWhere('department_id', $user->department_id);
-            });
-        }
+        // Ambil id departemen dari permission "view-dept-{id}"
+        $deptIds = $user->getPermissionNames()
+            ->filter(fn ($p) => str_starts_with($p, 'view-dept-'))
+            ->map(fn ($p) => (int) str_replace('view-dept-', '', $p))
+            ->filter()
+            ->values();
 
-        // 3) Default (non-admin): PIC/creator saja
-        return $q->where(function (Builder $qq) use ($user) {
-            $qq->where('pic_user_id', $user->id)
-               ->orWhere('created_by', $user->id);
+        // Kombinasi: selalu boleh lihat yang dia PIC, plus (jika ada) departemen yang diizinkan
+        return $q->where(function (Builder $w) use ($user, $deptIds) {
+            $w->where('pic_user_id', $user->id);
+
+            if ($deptIds->isNotEmpty()) {
+                $w->orWhereIn('department_id', $deptIds);
+            }
         });
     }
 
@@ -145,7 +137,7 @@ class PTK extends Model implements AuditableContract
     public function scopeStatus(Builder $q, ?string $status): Builder
     {
         return $status ? $q->where('status', $status) : $q;
-    }
+        }
 
     /**
      * Scope pencarian ringan di judul/nomor/deskripsi.
