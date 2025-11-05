@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
@@ -303,7 +304,7 @@ class ExportController extends Controller
                 foreach ($this->items as $i) {
                     $rows[] = [
                         $i->number ?? '-',
-                        $i->form_date?->format('Y-m-d'), // gunakan form_date untuk range export
+                        $i->form_date?->format('Y-m-d'),
                         $i->title,
                         optional($i->pic)->name,
                         optional($i->department)->name,

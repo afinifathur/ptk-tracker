@@ -67,10 +67,7 @@
             <a href="{{ route('ptk.queue') }}">Antrian Persetujuan</a>
           @endcan
 
-          @can('menu.recycle')
-            <a href="{{ route('ptk.recycle') }}">Recycle Bin</a>
-          @endcan
-        @endunlessrole
+         
 
         <a href="{{ route('exports.range.form') }}">Laporan Periode</a>
 
@@ -81,6 +78,12 @@
         @hasanyrole('director|kabag_qc|manager_hr|admin_qc_flange|admin_qc_fitting|admin_hr|admin_k3')
           <a href="{{ route('settings.categories') }}">Settings</a>
         @endhasanyrole
+
+         @can('menu.recycle')
+            <a href="{{ route('ptk.recycle') }}">Recycle Bin</a>
+          @endcan
+        @endunlessrole
+        
       </nav>
 
       {{-- Theme toggle + User dropdown --}}

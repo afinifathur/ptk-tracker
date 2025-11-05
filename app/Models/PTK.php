@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use App\Models\{Attachment, Category, Department, Subcategory, User};
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\{BelongsTo, HasMany};
@@ -15,22 +14,16 @@ class PTK extends Model implements AuditableContract
 {
     use SoftDeletes, Auditable;
 
-    /**
-     * Nama tabel (sesuai migration).
-     */
     protected $table = 'ptks';
 
-    /**
-     * Kolom yang boleh diisi mass assignment.
-     */
     protected $fillable = [
         'number',
         'title',
         'description',
-        'desc_nc',              // renamed from description_nc
+        'desc_nc',
         'evaluation',
-        'action_correction',    // renamed from correction_action
-        'action_corrective',    // renamed from corrective_action
+        'action_correction',
+        'action_corrective',
         'category_id',
         'subcategory_id',
         'department_id',
@@ -44,18 +37,12 @@ class PTK extends Model implements AuditableContract
         'created_by',
     ];
 
-    /**
-     * Casting atribut tanggal.
-     */
     protected $casts = [
         'due_date'    => 'datetime',
         'form_date'   => 'datetime',
         'approved_at' => 'datetime',
     ];
 
-    /**
-     * Kolom yang diikutkan dalam audit.
-     */
     protected array $auditInclude = [
         'number',
         'title',
@@ -100,47 +87,49 @@ class PTK extends Model implements AuditableContract
     // =====================================================================
 
     /**
-     * Satu pintu filter: visibilitas berdasarkan role & permission view-dept-{id}.
+     * Scope utama: filter visibilitas berdasarkan role pembuat (PIC role).
      *
      * Aturan:
-     * - director & auditor => lihat semua.
-     * - lainnya => selalu boleh lihat yang jadi PIC (pic_user_id == user.id),
-     *   dan (jika punya) boleh lihat yang department_id ada di permission "view-dept-{id}".
+     * - director & auditor: lihat semua
+     * - kabag_qc: lihat semua PTK yg dibuat oleh admin_qc_flange / admin_qc_fitting
+     * - manager_hr: lihat semua PTK yg dibuat oleh admin_hr / admin_k3
+     * - admin (lainnya): hanya lihat PTK yg dibuat dirinya sendiri
      */
     public function scopeVisibleTo(Builder $q, User $user): Builder
     {
-        // Director & Auditor: full access
+        // Director & Auditor → semua PTK
         if ($user->hasAnyRole(['director', 'auditor'])) {
             return $q;
         }
 
-        // Ambil id departemen dari permission "view-dept-{id}"
-        $deptIds = $user->getPermissionNames()
-            ->filter(fn ($p) => str_starts_with($p, 'view-dept-'))
-            ->map(fn ($p) => (int) str_replace('view-dept-', '', $p))
-            ->filter()
-            ->values();
+        // Kabag QC → PTK dari admin QC Flange/Fitting
+        if ($user->hasRole('kabag_qc')) {
+            return $q->whereHas('pic.roles', function ($r) {
+                $r->whereIn('name', ['admin_qc_flange', 'admin_qc_fitting']);
+            });
+        }
 
-        // Kombinasi: selalu boleh lihat yang dia PIC, plus (jika ada) departemen yang diizinkan
-        return $q->where(function (Builder $w) use ($user, $deptIds) {
-            $w->where('pic_user_id', $user->id);
+        // Manager HR → PTK dari admin HR / K3
+        if ($user->hasRole('manager_hr')) {
+            return $q->whereHas('pic.roles', function ($r) {
+                $r->whereIn('name', ['admin_hr', 'admin_k3']);
+            });
+        }
 
-            if ($deptIds->isNotEmpty()) {
-                $w->orWhereIn('department_id', $deptIds);
-            }
-        });
+        // Admin (lainnya) → hanya yang dia buat sendiri
+        return $q->where('pic_user_id', $user->id);
     }
 
     /**
-     * Scope helper untuk status.
+     * Scope filter status.
      */
     public function scopeStatus(Builder $q, ?string $status): Builder
     {
         return $status ? $q->where('status', $status) : $q;
-        }
+    }
 
     /**
-     * Scope pencarian ringan di judul/nomor/deskripsi.
+     * Scope pencarian ringan (title, number, desc).
      */
     public function scopeSearch(Builder $q, ?string $term): Builder
     {
@@ -149,26 +138,27 @@ class PTK extends Model implements AuditableContract
         $like = '%' . str_replace('%', '\%', $term) . '%';
         return $q->where(function (Builder $qq) use ($like) {
             $qq->where('title', 'like', $like)
-               ->orWhere('number', 'like', $like)
-               ->orWhere('description', 'like', $like)
-               ->orWhere('desc_nc', 'like', $like);
+                ->orWhere('number', 'like', $like)
+                ->orWhere('description', 'like', $like)
+                ->orWhere('desc_nc', 'like', $like);
         });
     }
 
     /**
-     * Scope untuk filter milik user (PIC/creator).
+     * Scope untuk filter PTK milik user tertentu (PIC atau creator).
      */
     public function scopeOwnedBy(Builder $q, User $user): Builder
     {
         return $q->where(function (Builder $qq) use ($user) {
             $qq->where('pic_user_id', $user->id)
-               ->orWhere('created_by', $user->id);
+                ->orWhere('created_by', $user->id);
         });
     }
 
     // =====================================================================
     // RELATIONSHIPS
     // =====================================================================
+
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
@@ -184,6 +174,9 @@ class PTK extends Model implements AuditableContract
         return $this->belongsTo(Department::class);
     }
 
+    /**
+     * User yang menjadi PIC (pembuat utama PTK)
+     */
     public function pic(): BelongsTo
     {
         return $this->belongsTo(User::class, 'pic_user_id');

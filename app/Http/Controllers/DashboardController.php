@@ -13,16 +13,15 @@ class DashboardController extends Controller
         $user = auth()->user();
 
         // Periode 26 minggu ke belakang
-        $from = now()->copy()->subWeeks(26)->startOfWeek(); // Senin (ISO)
+        $from = now()->copy()->subWeeks(26)->startOfWeek();
         $to   = now();
 
-        // Satu pintu: semua data lewat scope visibleTo()
-        $base = PTK::query()
-            ->visibleTo($user);
+        // Semua data disaring lewat scope visibleTo()
+        $base = PTK::visibleTo($user);
 
-        // ===============================
+        // =========================================================
         // KPI ringkas
-        // ===============================
+        // =========================================================
         $total      = (clone $base)->count();
         $completed  = (clone $base)->where('status', 'Completed')->count();
         $inProgress = (clone $base)->where('status', 'In Progress')->count();
@@ -31,9 +30,9 @@ class DashboardController extends Controller
             ->whereDate('due_date', '<', today())
             ->count();
 
-        // ===============================
+        // =========================================================
         // Tren mingguan (26 minggu) — basis: form_date
-        // ===============================
+        // =========================================================
         $seriesRaw = (clone $base)
             ->whereBetween('form_date', [$from->toDateString(), $to->toDateString()])
             ->selectRaw('YEARWEEK(form_date, 3) as yw, COUNT(*) as c')
@@ -41,39 +40,34 @@ class DashboardController extends Controller
             ->pluck('c', 'yw'); // contoh: [202401 => 5, 202402 => 3, ...]
 
         $weeks = collect(CarbonPeriod::create($from, '1 week', $to))
-            ->map(fn ($w) => $w->copy()->startOfWeek());
+            ->map(fn($w) => $w->copy()->startOfWeek());
 
         $labels = [];
         $data   = [];
 
         foreach ($weeks as $week) {
-            // kunci kompatibel dengan YEARWEEK(...,3)
-            $yw = (int) $week->format('oW'); // contoh '202501' -> 202501
-            $labels[] = $week->format('W');  // label "01".."53"
-            $data[] = (int) ($seriesRaw[$yw] ?? 0);
+            $yw = (int) $week->format('oW'); // format kunci YEARWEEK
+            $labels[] = $week->format('W');
+            $data[]   = (int) ($seriesRaw[$yw] ?? 0);
         }
 
-        // ===============================
-        // Penanda bulan (ID) untuk chart — basis: form_date
-        // ===============================
+        // =========================================================
+        // Penanda bulan (untuk chart)
+        // =========================================================
         $indoMonths = [1 => 'Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nop','Des'];
         $monthMarks = [];
         $prevMonth  = null;
 
         foreach ($weeks as $week) {
             $m = (int) $week->format('n');
-            if ($m !== $prevMonth) {
-                $monthMarks[] = $indoMonths[$m];
-                $prevMonth = $m;
-            } else {
-                $monthMarks[] = '';
-            }
+            $monthMarks[] = ($m !== $prevMonth) ? $indoMonths[$m] : '';
+            $prevMonth = $m;
         }
 
-        // ===============================
-        // SLA 6 bulan (Completed On Time)
-        // ===============================
-        $slaBase   = (clone $base)
+        // =========================================================
+        // SLA 6 bulan terakhir (Completed On Time)
+        // =========================================================
+        $slaBase = (clone $base)
             ->whereBetween('created_at', [$from, $to])
             ->where('status', 'Completed');
 
@@ -81,9 +75,9 @@ class DashboardController extends Controller
         $slaTotal  = (clone $slaBase)->count();
         $slaPct    = $slaTotal ? round($slaOnTime * 100 / $slaTotal, 1) : 0;
 
-        // ===============================
+        // =========================================================
         // Top 3 Department, Category, Subcategory (6 bulan)
-        // ===============================
+        // =========================================================
         $base6 = (clone $base)->whereBetween('created_at', [$from, $to]);
 
         $topDepartments = (clone $base6)
@@ -93,7 +87,7 @@ class DashboardController extends Controller
             ->orderByDesc('total')
             ->take(3)
             ->get()
-            ->map(fn ($r) => [
+            ->map(fn($r) => [
                 'name'  => $r->department->name ?? '-',
                 'total' => (int) $r->total,
             ]);
@@ -105,7 +99,7 @@ class DashboardController extends Controller
             ->orderByDesc('total')
             ->take(3)
             ->get()
-            ->map(fn ($r) => [
+            ->map(fn($r) => [
                 'name'  => $r->category->name ?? '-',
                 'total' => (int) $r->total,
             ]);
@@ -118,34 +112,29 @@ class DashboardController extends Controller
             ->orderByDesc('total')
             ->take(3)
             ->get()
-            ->map(fn ($r) => [
+            ->map(fn($r) => [
                 'name'  => $r->subcategory->name ?? '-',
                 'total' => (int) $r->total,
             ]);
 
-        // ===============================
+        // =========================================================
         // Overdue PTK (Top 10)
-        // ===============================
+        // =========================================================
         $overdueTop = (clone $base)
-            ->with([
-                'pic:id,name',
-                'department:id,name',
-                'category:id,name',
-                'subcategory:id,name',
-            ])
+            ->with(['pic:id,name', 'department:id,name', 'category:id,name', 'subcategory:id,name'])
             ->where('status', '!=', 'Completed')
             ->whereDate('due_date', '<', today())
-            ->orderBy('due_date') // paling lama di atas
+            ->orderBy('due_date')
             ->take(10)
             ->get([
-                'id','number','title','created_at','pic_user_id',
-                'department_id','category_id','subcategory_id',
-                'status','due_date',
+                'id', 'number', 'title', 'created_at', 'pic_user_id',
+                'department_id', 'category_id', 'subcategory_id',
+                'status', 'due_date',
             ]);
 
-        // ===============================
+        // =========================================================
         // Render ke View
-        // ===============================
+        // =========================================================
         return view('dashboard', [
             'total'            => $total,
             'inProgress'       => $inProgress,
