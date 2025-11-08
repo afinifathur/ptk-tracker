@@ -17,7 +17,9 @@ class PTKController extends Controller
 {
     private const PER_PAGE     = 20;
     private const KANBAN_LIMIT = 30;
-    private const STATUSES     = ['Not Started', 'In Progress', 'Completed'];
+
+    // Tambahkan status baru agar konsisten dengan flow antrian
+    private const STATUSES     = ['Not Started', 'In Progress', 'Submitted', 'Waiting Director', 'Completed'];
 
     public function __construct(private readonly AttachmentService $attachments)
     {
@@ -51,13 +53,17 @@ class PTKController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $data = $this->validatePayload($request);
+        // number wajib & unik; due_date wajib; title max 200
+        $data = $request->validate($this->rulesForStore());
+
+        // kolom sistem
         $data['created_by'] = $request->user()->id;
 
+        // gunakan PIC dari form (tidak dioverride), konsisten dengan view
         $ptk = PTK::create(collect($data)->except('attachments')->toArray());
         $this->handleAttachments($request, $ptk->id);
 
-        return redirect()->route('ptk.show', $ptk)->with('ok', 'PTK dibuat.');
+        return redirect()->route('ptk.index')->with('ok', 'PTK tersimpan.');
     }
 
     # =========================================================
@@ -91,7 +97,8 @@ class PTKController extends Controller
 
     public function update(Request $request, PTK $ptk): RedirectResponse
     {
-        $data = $this->validatePayload($request);
+        // number unik tetapi mengabaikan id PTK sendiri
+        $data = $request->validate($this->rulesForUpdate($ptk));
 
         // Auto set In Progress ketika evaluation diisi dari Not Started
         if ($request->filled('evaluation') && $ptk->status === 'Not Started') {
@@ -101,7 +108,7 @@ class PTKController extends Controller
         $ptk->update(collect($data)->except('attachments')->toArray());
         $this->handleAttachments($request, $ptk->id);
 
-        return back()->with('ok', 'PTK diperbarui.');
+        return back()->with('ok', 'Perubahan disimpan.');
     }
 
     # =========================================================
@@ -151,45 +158,51 @@ class PTKController extends Controller
     }
 
     # =========================================================
-    # QUEUE — antrian approval (pakai scope visibleTo)
-    #   - route: Route::get('/ptk-queue/{stage?}', ...)->name('ptk.queue');
-    #   - stage: null/all | approver | director
+    # QUEUE — antrian approval (tanpa filter "no number")
+    #   - stage: null/all (default kabag/manager) | director
+    #   - jika user direktur, auto ke antrian direktur
     # =========================================================
     public function queue(Request $request, ?string $stage = null): View
     {
-        $base = PTK::with(['department','category','subcategory','pic'])
-            ->visibleTo(auth()->user())
-            ->where('status','Completed')
-            ->whereNull('number');
-
+        $user  = auth()->user();
         $stage = $stage ? strtolower($stage) : null;
-        if ($stage === 'approver') {
-            $base->whereNull('approved_at');        // menunggu approver
-        } elseif ($stage === 'director') {
-            $base->whereNotNull('approved_at');     // menunggu director
+
+        $base = PTK::with(['department','pic'])->visibleTo($user);
+
+        if ($user->hasRole('director') || $stage === 'director') {
+            // Stage 2: menunggu Direktur
+            $items = (clone $base)
+                ->where('status', 'Waiting Director')
+                ->whereNull('approved_stage2_at')
+                ->latest('updated_at')
+                ->get();
+            $stage = 'director';
+        } else {
+            // Stage 1: menunggu Kabag/Manager
+            $items = (clone $base)
+                ->where('status', 'Submitted')
+                ->whereNull('approved_stage1_at')
+                ->latest('updated_at')
+                ->get();
+            $stage = 'approver';
         }
 
-        $items = $base->latest('updated_at')->get();
-
-        return view('ptk.queue', [
-            'items' => $items,
-            'stage' => $stage ?? 'all',
-        ]);
+        return view('ptk.queue', compact('items', 'stage'));
     }
 
     # =========================================================
-    # RECYCLE BIN (pakai scope visibleTo) — kirim $items ke Blade
+    # RECYCLE BIN (pakai scope visibleTo)
     # =========================================================
     public function recycle(Request $request): View
     {
-    $items = PTK::onlyTrashed()
-        ->visibleTo(auth()->user())
-        ->with(['department:id,name','category:id,name','subcategory:id,name','pic:id,name'])
-        ->latest('deleted_at')
-        ->paginate(self::PER_PAGE); // <-- penting: pakai paginate, bukan get()
+        $items = PTK::onlyTrashed()
+            ->visibleTo(auth()->user())
+            ->with(['department:id,name','category:id,name','subcategory:id,name','pic:id,name'])
+            ->latest('deleted_at')
+            ->paginate(self::PER_PAGE);
 
-    return view('ptk.recycle', compact('items'));
-}
+        return view('ptk.recycle', compact('items'));
+    }
 
     public function restore(Request $request, string $id): RedirectResponse
     {
@@ -215,19 +228,32 @@ class PTKController extends Controller
     }
 
     # =========================================================
-    # SUBMIT — ubah status ke Completed jika evaluasi sudah ada
+    # SUBMIT — ubah status ke Submitted (bukan Completed)
+    #   - wajib sudah ada number (manual)
+    #   - reset approval & reject info lama
     # =========================================================
     public function submit(PTK $ptk): RedirectResponse
     {
         $this->authorize('update', $ptk);
 
-        if (empty($ptk->evaluation)) {
-            return back()->with('error', 'PTK belum bisa disubmit — evaluasi belum diisi.');
+        // Wajib sudah ada number (sekarang manual)
+        if (empty($ptk->number)) {
+            return back()->with('ok', 'Isi Nomor PTK dulu sebelum Submit.');
         }
 
-        $ptk->update(['status' => 'Completed']);
+        $ptk->update([
+            'status'             => 'Submitted',
+            'approved_stage1_by' => null,
+            'approved_stage1_at' => null,
+            'approved_stage2_by' => null,
+            'approved_stage2_at' => null,
+            'last_reject_stage'  => null,
+            'last_reject_reason' => null,
+            'last_reject_by'     => null,
+            'last_reject_at'     => null,
+        ]);
 
-        return redirect()->route('ptk.show', $ptk)->with('ok', 'PTK telah disubmit dan siap approval.');
+        return back()->with('ok', 'PTK dikirim ke antrian Kabag/Manager.');
     }
 
     # =========================================================
@@ -259,28 +285,60 @@ class PTKController extends Controller
         return $builder->get();
     }
 
-    private function validatePayload(Request $request): array
-    {
-        return $request->validate($this->rules());
-    }
-
-    private function rules(): array
+    /**
+     * Validasi untuk STORE (create)
+     * - number wajib & unik
+     * - due_date wajib
+     * - title max 200
+     * - pic_user_id wajib (selaras dengan form)
+     */
+    private function rulesForStore(): array
     {
         return [
-            'title'             => ['required','string','max:255'],
-            'description'       => ['nullable','string'],
-            'desc_nc'           => ['nullable','string'],
-            'evaluation'        => ['nullable','string'],
-            'action_correction' => ['nullable','string'],
-            'action_corrective' => ['nullable','string'],
-            'category_id'       => ['required','exists:categories,id'],
-            'subcategory_id'    => ['nullable','exists:subcategories,id'],
-            'department_id'     => ['required','exists:departments,id'],
-            'pic_user_id'       => ['required','exists:users,id'],
-            'due_date'          => ['nullable','date'],
-            'form_date'         => ['required','date'],
-            'status'            => ['nullable', Rule::in(self::STATUSES)],
-            'attachments.*'     => ['file','mimes:jpg,jpeg,png,pdf','max:5120'],
+            'number'             => ['required','string','max:50','unique:ptks,number'],
+            'title'              => ['required','string','max:200'],
+            'description'        => ['nullable','string'],
+            'desc_nc'            => ['nullable','string'],
+            'evaluation'         => ['nullable','string'],
+            'action_correction'  => ['nullable','string'],
+            'action_corrective'  => ['nullable','string'],
+            'category_id'        => ['required','exists:categories,id'],
+            'subcategory_id'     => ['nullable','exists:subcategories,id'],
+            'department_id'      => ['required','exists:departments,id'],
+            'pic_user_id'        => ['required','exists:users,id'], // << ditambahkan
+            'due_date'           => ['required','date'],
+            'form_date'          => ['required','date'],
+            'status'             => ['nullable', Rule::in(self::STATUSES)],
+            'attachments.*'      => ['file','mimes:jpg,jpeg,png,pdf','max:5120'],
+        ];
+    }
+
+    /**
+     * Validasi untuk UPDATE (edit)
+     * - number unik tapi mengabaikan id PTK sendiri
+     * - due_date wajib
+     */
+    private function rulesForUpdate(PTK $ptk): array
+    {
+        return [
+            'number'             => [
+                'required','string','max:50',
+                Rule::unique('ptks','number')->ignore($ptk->id),
+            ],
+            'title'              => ['required','string','max:200'],
+            'description'        => ['nullable','string'],
+            'desc_nc'            => ['nullable','string'],
+            'evaluation'         => ['nullable','string'],
+            'action_correction'  => ['nullable','string'],
+            'action_corrective'  => ['nullable','string'],
+            'category_id'        => ['required','exists:categories,id'],
+            'subcategory_id'     => ['nullable','exists:subcategories,id'],
+            'department_id'      => ['required','exists:departments,id'],
+            'pic_user_id'        => ['required','exists:users,id'],
+            'due_date'           => ['required','date'],
+            'form_date'          => ['required','date'],
+            'status'             => ['nullable', Rule::in(self::STATUSES)],
+            'attachments.*'      => ['file','mimes:jpg,jpeg,png,pdf','max:5120'],
         ];
     }
 

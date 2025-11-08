@@ -16,6 +16,9 @@ class PTK extends Model implements AuditableContract
 
     protected $table = 'ptks';
 
+    // =====================================================================
+    // MASS ASSIGNMENT
+    // =====================================================================
     protected $fillable = [
         'number',
         'title',
@@ -31,18 +34,37 @@ class PTK extends Model implements AuditableContract
         'status',
         'due_date',
         'form_date',
-        'approved_at',
-        'approver_id',
-        'director_id',
+        'approved_at',   // legacy (jika masih dipakai)
+        'approver_id',   // legacy
+        'director_id',   // legacy
         'created_by',
+
+        // --- STAGES & REJECT INFO ---
+        'approved_stage1_by',
+        'approved_stage1_at',
+        'approved_stage2_by',
+        'approved_stage2_at',
+        'last_reject_stage',
+        'last_reject_reason',
+        'last_reject_by',
+        'last_reject_at',
     ];
 
+    // =====================================================================
+    // CASTS
+    // =====================================================================
     protected $casts = [
-        'due_date'    => 'datetime',
-        'form_date'   => 'datetime',
-        'approved_at' => 'datetime',
+        'due_date'           => 'datetime',
+        'form_date'          => 'datetime',
+        'approved_at'        => 'datetime',
+        'approved_stage1_at' => 'datetime',
+        'approved_stage2_at' => 'datetime',
+        'last_reject_at'     => 'datetime',
     ];
 
+    // =====================================================================
+    // AUDIT
+    // =====================================================================
     protected array $auditInclude = [
         'number',
         'title',
@@ -62,23 +84,46 @@ class PTK extends Model implements AuditableContract
         'approver_id',
         'director_id',
         'created_by',
+
+        // --- STAGES & REJECT INFO ---
+        'approved_stage1_by',
+        'approved_stage1_at',
+        'approved_stage2_by',
+        'approved_stage2_at',
+        'last_reject_stage',
+        'last_reject_reason',
+        'last_reject_by',
+        'last_reject_at',
     ];
 
     // =====================================================================
-    // CONSTANTS
+    // STATUS CONSTANTS
     // =====================================================================
-    public const STATUS_NOT_STARTED = 'Not Started';
-    public const STATUS_IN_PROGRESS = 'In Progress';
-    public const STATUS_DONE        = 'Done';
+    public const STATUS_NOT_STARTED       = 'Not Started';
+    public const STATUS_IN_PROGRESS       = 'In Progress';
+    public const STATUS_SUBMITTED         = 'Submitted';
+    public const STATUS_WAITING_DIRECTOR  = 'Waiting Director';
+    public const STATUS_COMPLETED         = 'Completed';
 
     // =====================================================================
     // MUTATORS
     // =====================================================================
+    /**
+     * Nomor PTK boleh diubah hingga sebelum masuk alur approval (Submitted+).
+     */
     public function setNumberAttribute($value): void
     {
-        if (!empty($this->attributes['number'])) {
+        $locked = [
+            self::STATUS_SUBMITTED,
+            self::STATUS_WAITING_DIRECTOR,
+            self::STATUS_COMPLETED,
+        ];
+
+        // Kunci perubahan nomor jika status original sudah masuk approval/completed
+        if (in_array($this->getOriginal('status'), $locked, true)) {
             return;
         }
+
         $this->attributes['number'] = $value;
     }
 
@@ -87,36 +132,31 @@ class PTK extends Model implements AuditableContract
     // =====================================================================
 
     /**
-     * Scope utama: filter visibilitas berdasarkan role pembuat (PIC role).
+     * Scope visibilitas berbasis ROLE PIC (bukan departemen).
      *
-     * Aturan:
      * - director & auditor: lihat semua
-     * - kabag_qc: lihat semua PTK yg dibuat oleh admin_qc_flange / admin_qc_fitting
-     * - manager_hr: lihat semua PTK yg dibuat oleh admin_hr / admin_k3
-     * - admin (lainnya): hanya lihat PTK yg dibuat dirinya sendiri
+     * - kabag_qc: PTK dari PIC ber-role admin_qc_flange/fitting
+     * - manager_hr: PTK dari PIC ber-role admin_hr/admin_k3
+     * - lainnya: hanya PTK dengan pic_user_id = user
      */
     public function scopeVisibleTo(Builder $q, User $user): Builder
     {
-        // Director & Auditor → semua PTK
         if ($user->hasAnyRole(['director', 'auditor'])) {
             return $q;
         }
 
-        // Kabag QC → PTK dari admin QC Flange/Fitting
         if ($user->hasRole('kabag_qc')) {
-            return $q->whereHas('pic.roles', function ($r) {
-                $r->whereIn('name', ['admin_qc_flange', 'admin_qc_fitting']);
-            });
+            return $q->whereHas('pic.roles', fn($r) =>
+                $r->whereIn('name', ['admin_qc_flange', 'admin_qc_fitting'])
+            );
         }
 
-        // Manager HR → PTK dari admin HR / K3
         if ($user->hasRole('manager_hr')) {
-            return $q->whereHas('pic.roles', function ($r) {
-                $r->whereIn('name', ['admin_hr', 'admin_k3']);
-            });
+            return $q->whereHas('pic.roles', fn($r) =>
+                $r->whereIn('name', ['admin_hr', 'admin_k3'])
+            );
         }
 
-        // Admin (lainnya) → hanya yang dia buat sendiri
         return $q->where('pic_user_id', $user->id);
     }
 
@@ -129,7 +169,7 @@ class PTK extends Model implements AuditableContract
     }
 
     /**
-     * Scope pencarian ringan (title, number, desc).
+     * Scope pencarian ringan (title, number, desc, desc_nc).
      */
     public function scopeSearch(Builder $q, ?string $term): Builder
     {
@@ -138,21 +178,43 @@ class PTK extends Model implements AuditableContract
         $like = '%' . str_replace('%', '\%', $term) . '%';
         return $q->where(function (Builder $qq) use ($like) {
             $qq->where('title', 'like', $like)
-                ->orWhere('number', 'like', $like)
-                ->orWhere('description', 'like', $like)
-                ->orWhere('desc_nc', 'like', $like);
+               ->orWhere('number', 'like', $like)
+               ->orWhere('description', 'like', $like)
+               ->orWhere('desc_nc', 'like', $like);
         });
     }
 
     /**
-     * Scope untuk filter PTK milik user tertentu (PIC atau creator).
+     * Scope untuk PTK milik user tertentu (PIC atau creator).
      */
     public function scopeOwnedBy(Builder $q, User $user): Builder
     {
         return $q->where(function (Builder $qq) use ($user) {
             $qq->where('pic_user_id', $user->id)
-                ->orWhere('created_by', $user->id);
+               ->orWhere('created_by', $user->id);
         });
+    }
+
+    // =====================================================================
+    // HELPERS - STAGES
+    // =====================================================================
+    public function awaitingStage1(): bool
+    {
+        return $this->status === self::STATUS_SUBMITTED
+            && is_null($this->approved_stage1_at);
+    }
+
+    public function awaitingStage2(): bool
+    {
+        return $this->status === self::STATUS_WAITING_DIRECTOR
+            && !is_null($this->approved_stage1_at)
+            && is_null($this->approved_stage2_at);
+    }
+
+    public function isCompleted(): bool
+    {
+        return $this->status === self::STATUS_COMPLETED
+            && !is_null($this->approved_stage2_at);
     }
 
     // =====================================================================
@@ -174,19 +236,19 @@ class PTK extends Model implements AuditableContract
         return $this->belongsTo(Department::class);
     }
 
-    /**
-     * User yang menjadi PIC (pembuat utama PTK)
-     */
+    /** User yang menjadi PIC */
     public function pic(): BelongsTo
     {
         return $this->belongsTo(User::class, 'pic_user_id');
     }
 
+    /** (legacy) satu kolom approver_id */
     public function approver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approver_id');
     }
 
+    /** (legacy) satu kolom director_id */
     public function director(): BelongsTo
     {
         return $this->belongsTo(User::class, 'director_id');
@@ -200,5 +262,17 @@ class PTK extends Model implements AuditableContract
     public function attachments(): HasMany
     {
         return $this->hasMany(Attachment::class, 'ptk_id');
+    }
+
+    /** Penandatangan Stage 1 (Kabag/Manager) */
+    public function approverStage1(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_stage1_by');
+    }
+
+    /** Penandatangan Stage 2 (Direktur) */
+    public function approverStage2(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_stage2_by');
     }
 }

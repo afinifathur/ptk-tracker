@@ -4,58 +4,143 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\PTK;
-use App\Services\PTKNumberingService;
+use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 
 class ApprovalController extends Controller
 {
     /**
-     * Approve PTK:
-     * - Wajib lolos policy 'approve'
-     * - Nomor otomatis dari PTKNumberingService
-     * - Set approver & approved_at
+     * Approve PTK (multistage):
+     * - Stage 1: Kabag/Manager  -> status: Waiting Director
+     * - Stage 2: Direktur       -> status: Completed
+     * Catatan: tidak ada penomoran otomatis di tahap mana pun.
      */
-    public function approve(PTK $ptk, PTKNumberingService $svc): RedirectResponse
+    public function approve(PTK $ptk): RedirectResponse
     {
-        $this->authorize('approve', $ptk);
+        $u = auth()->user();
 
-        // Generate nomor (mis: PTK/{DEPT}/{YY}/{MM}/{RUN})
-        if (empty($ptk->number)) {
-            $ptk->number = $svc->generate($ptk);
+        // Stage 1 → Waiting Director
+        if ($u->hasAnyRole(['kabag_qc', 'manager_hr'])) {
+            abort_unless(
+                $ptk->status === PTK::STATUS_SUBMITTED && is_null($ptk->approved_stage1_at),
+                403,
+                'PTK tidak dalam antrian Stage 1.'
+            );
+
+            $ptk->update([
+                'approved_stage1_by' => $u->id,
+                'approved_stage1_at' => now(),
+                'status'             => PTK::STATUS_WAITING_DIRECTOR,
+            ]);
+
+            // audit (lewati jika helper tidak tersedia)
+            if (function_exists('\activity')) {
+                \activity()
+                    ->performedOn($ptk)
+                    ->causedBy($u)
+                    ->withProperties(['stage' => 'stage1'])
+                    ->log('PTK approved by Kabag/Manager');
+            }
+
+            return back()->with('ok', 'Disetujui Kabag/Manager. Menunggu Direktur.');
         }
 
-        $ptk->approver_id = auth()->id();
-        $ptk->approved_at = now();
-        // Biasanya sudah 'Completed' saat masuk antrian; biarkan atau set ulang:
-        $ptk->status = 'Completed';
+        // Stage 2 → Completed
+        if ($u->hasRole('director')) {
+            abort_unless(
+                $ptk->status === PTK::STATUS_WAITING_DIRECTOR && is_null($ptk->approved_stage2_at),
+                403,
+                'PTK tidak dalam antrian Direktur.'
+            );
 
-        // Opsional: cap juga director_id jika yang approve adalah director
-        if (auth()->user()?->hasRole('director')) {
-            $ptk->director_id = auth()->id();
+            $ptk->update([
+                'approved_stage2_by' => $u->id,
+                'approved_stage2_at' => now(),
+                'status'             => PTK::STATUS_COMPLETED,
+            ]);
+
+            if (function_exists('\activity')) {
+                \activity()
+                    ->performedOn($ptk)
+                    ->causedBy($u)
+                    ->withProperties(['stage' => 'stage2'])
+                    ->log('PTK approved by Director');
+            }
+
+            return back()->with('ok', 'Disetujui Direktur. PTK Completed.');
         }
 
-        $ptk->save();
-
-        return back()->with('ok', 'PTK sudah di-approve.');
+        abort(403, 'User tidak berwenang approve.');
     }
 
     /**
-     * Reject PTK:
-     * - Wajib lolos policy 'reject'
-     * - Kembalikan status ke In Progress, kosongkan approved_at
-     * - Nomor dibiarkan (tetap kosong jika belum dinomori)
+     * Reject PTK (multistage):
+     * - Stage 1 reject oleh Kabag/Manager
+     * - Stage 2 reject oleh Direktur
+     * - Kembali ke status "In Progress" untuk revisi admin.
      */
-    public function reject(PTK $ptk): RedirectResponse
+    public function reject(Request $request, PTK $ptk): RedirectResponse
     {
-        $this->authorize('reject', $ptk);
+        $u = auth()->user();
 
-        $ptk->status       = 'In Progress';
-        $ptk->approved_at  = null;
-        $ptk->approver_id  = null;
-        $ptk->director_id  = null;
-        // $ptk->number tetap seperti adanya (biasanya masih kosong)
-        $ptk->save();
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:2000'],
+        ]);
 
-        return back()->with('ok', 'PTK dikembalikan ke In Progress.');
+        // Stage 1 reject oleh Kabag/Manager
+        if ($u->hasAnyRole(['kabag_qc', 'manager_hr'])) {
+            abort_unless(
+                $ptk->status === PTK::STATUS_SUBMITTED || $ptk->status === PTK::STATUS_WAITING_DIRECTOR,
+                403,
+                'PTK tidak bisa direject pada tahap ini.'
+            );
+
+            $ptk->update([
+                'last_reject_stage'  => 'stage1',
+                'last_reject_reason' => $data['reason'],
+                'last_reject_by'     => $u->id,
+                'last_reject_at'     => now(),
+                'status'             => PTK::STATUS_IN_PROGRESS, // kembali ke admin
+            ]);
+
+            if (function_exists('\activity')) {
+                \activity()
+                    ->performedOn($ptk)
+                    ->causedBy($u)
+                    ->withProperties(['stage' => 'stage1', 'reason' => $data['reason']])
+                    ->log('PTK rejected by Kabag/Manager');
+            }
+
+            return back()->with('ok', 'Ditolak & dikembalikan ke Admin (In Progress).');
+        }
+
+        // Stage 2 reject oleh Direktur
+        if ($u->hasRole('director')) {
+            abort_unless(
+                $ptk->status === PTK::STATUS_WAITING_DIRECTOR && is_null($ptk->approved_stage2_at),
+                403,
+                'PTK tidak dalam antrian Direktur.'
+            );
+
+            $ptk->update([
+                'last_reject_stage'  => 'stage2',
+                'last_reject_reason' => $data['reason'],
+                'last_reject_by'     => $u->id,
+                'last_reject_at'     => now(),
+                'status'             => PTK::STATUS_IN_PROGRESS,
+            ]);
+
+            if (function_exists('\activity')) {
+                \activity()
+                    ->performedOn($ptk)
+                    ->causedBy($u)
+                    ->withProperties(['stage' => 'stage2', 'reason' => $data['reason']])
+                    ->log('PTK rejected by Director');
+            }
+
+            return back()->with('ok', 'Ditolak Direktur & dikembalikan ke Admin (In Progress).');
+        }
+
+        abort(403, 'User tidak berwenang reject.');
     }
 }

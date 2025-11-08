@@ -1,3 +1,4 @@
+{{-- resources/views/exports/ptk_pdf.blade.php --}}
 <!DOCTYPE html>
 <html>
 <head>
@@ -6,7 +7,7 @@
 <style>
   /* Tipografi */
   *{ font-family: 'DejaVu Sans', Helvetica, Arial, sans-serif; font-size:11px; line-height:1.35; }
-  body{ margin:10mm 10mm; } /* lebih sempit dari Word Narrow (12.7mm) */
+  body{ margin:10mm 10mm; }
 
   /* Header */
   .title{ font-size:16px; font-weight:700; margin:0; }
@@ -23,26 +24,27 @@
   td{ border:1px solid #d7dbe1; padding:5px 6px; vertical-align:top; }
   .grid2 td{ width:50%; }
 
-  /* Status biasa (tanpa badge) */
+  /* Status */
   .status{ font-weight:600; }
 
   /* Tanda tangan */
-  .sign-box{ height:70px; border:1px dashed #aaa; text-align:center; }
-  .sign-img{ max-height:60px; }
   .small{ font-size:10px; }
+  .sig-title{ font-weight:600; margin-bottom:6px; text-align:center; }
+  .sig-box{ position:relative; height:100px; text-align:center; border:0; }
+  .sig-img{ height:100px; position:relative; top:-10px; } /* naik sedikit agar overlap tulisan */
 
-  /* Attachment + caption */
+  /* Lampiran */
   .attachments img{ width:100%; height:auto; display:block; }
   .caption{ font-size:10px; color:#555; margin-top:4px; }
 
-  /* Spacing helpers */
+  /* Spacing */
   .mb6{ margin-bottom:6px; } .mb10{ margin-bottom:10px; }
 </style>
 </head>
 <body>
 
   {{-- HEADER --}}
-  <table style="width:100%;" class="mb6">
+  <table class="mb6">
     <tr>
       <td>
         @if(!empty($companyLogoBase64))
@@ -73,7 +75,6 @@
       <td style="border-right:1px solid #d7dbe1;"><strong>Tanggal Input</strong></td>
       <td>: {{ $ptk->created_at?->timezone(config('app.timezone'))->format('d M Y H:i') }}</td>
     </tr>
-    {{-- Due date & Approved at tetap di lokasi masing-masing (ringkasan & tanda tangan) --}}
   </table>
 
   {{-- RINGKASAN --}}
@@ -118,7 +119,7 @@
     <tr><td>{!! nl2br(e($ptk->action_corrective ?? '-')) !!}</td></tr>
   </table>
 
-  {{-- LAMPIRAN FOTO (3 kolom + caption, maks 6) --}}
+  {{-- LAMPIRAN FOTO (maks 6) --}}
   @php $displayed = $ptk->attachments->take(6); @endphp
   @if($displayed->count() > 0)
     <table class="attachments mb10">
@@ -138,7 +139,7 @@
           @if(($i + 1) % 3 === 0)</tr><tr>@endif
         @endforeach
 
-        {{-- filler cell jika jumlah tidak kelipatan 3 --}}
+        {{-- filler cell jika tidak kelipatan 3 --}}
         @php $sisa = $displayed->count() % 3; @endphp
         @if($sisa !== 0)
           @for($k = 0; $k < 3 - $sisa; $k++)
@@ -149,48 +150,91 @@
     </table>
   @endif
 
-  {{-- TANDA TANGAN --}}
-  <table class="mb10">
-    <tr>
-      <th>Pembuat (Admin)</th>
-      <th>Disetujui (Kabag/Manager)</th>
-      <th>Direktur</th>
-    </tr>
-    <tr>
-      <td class="sign-box">
-        @if(!empty($signAdmin)) <img class="sign-img" src="{{ $signAdmin }}"> @endif
-        <div class="small">{{ $ptk->creator->name ?? '-' }}</div>
-      </td>
-      <td class="sign-box">
-        @if($ptk->approved_at && !empty($signApprover)) <img class="sign-img" src="{{ $signApprover }}"> @endif
-        <div class="small">
-          {{ optional($ptk->approver)->name ?? '-' }}<br>
-          {{ optional($ptk->approved_at)->format('d M Y H:i') }}
-        </div>
-      </td>
-      <td class="sign-box">
-        @if(!empty($signDirector)) <img class="sign-img" src="{{ $signDirector }}"> @endif
-        <div class="small">{{ optional($ptk->director)->name ?? '-' }}</div>
-      </td>
-    </tr>
-  </table>
+ {{-- ====== TANDA TANGAN (Stage 1 & Stage 2) ====== --}}
+<div class="hr"></div>
 
-  {{-- FOOTER AUDIT + QR --}}
-  <div class="hr"></div>
-  <table>
-    <tr>
-      <td class="small muted">
-        Dokumen hash: {{ $docHash }}<br>
-        Dicetak: {{ now()->format('d M Y H:i') }} · IP: {{ request()->ip() }}
-      </td>
-      <td style="text-align:right;">
-        @if(!empty($qrBase64))
-          <img src="{{ $qrBase64 }}" style="width:90px; height:90px;">
-          <div class="small muted">{{ $verifyUrl }}</div>
+@php
+  $signDir = public_path('signatures');
+
+  $u1 = $ptk->approverStage1;
+  $u2 = $ptk->approverStage2;
+
+  // per-user override
+  $u1File = $u1 ? $signDir . '/users/' . $u1->id . '.png' : null;
+  $u2File = $u2 ? $signDir . '/users/' . $u2->id . '.png' : null;
+
+  // fallback per-role stage 1
+  $roleStage1 = $u1 && method_exists($u1, 'roles') ? ($u1->roles->pluck('name')->first() ?? null) : null;
+  $stage1RoleFile = match($roleStage1) {
+      'kabag_qc'   => $signDir . '/kabag_qc.png',
+      'manager_hr' => $signDir . '/manager_hr.png',
+      default      => $signDir . '/kabag_qc.png',
+  };
+
+  // fallback stage 2
+  $stage2RoleFile = $signDir . '/director.png';
+
+  // pilih final file
+  $stage1File = ($u1File && file_exists($u1File)) ? $u1File : (file_exists($stage1RoleFile) ? $stage1RoleFile : null);
+  $stage2File = ($u2File && file_exists($u2File)) ? $u2File : (file_exists($stage2RoleFile) ? $stage2RoleFile : null);
+@endphp
+
+<table style="width:100%; border:0; margin-top:12px; margin-bottom:0;">
+  <tr>
+    {{-- Stage 1 --}}
+    <td style="width:50%; vertical-align:top; padding-right:16px; border:0;">
+      <div class="sig-title">Disetujui</div>
+      <div class="sig-box" style="height:130px;"> {{-- tinggi diperbesar --}}
+        @if($ptk->approved_stage1_at)
+          @if($stage1File)
+            <img src="{{ $stage1File }}" alt="ttd stage1" class="sig-img" style="height:115px; top:-12px;">
+          @endif
+          <div class="small" style="margin-top:-4px;">
+            <div>{{ $u1->name ?? '' }}</div>
+            <div>{{ $ptk->approved_stage1_at->format('d M Y H:i') }}</div>
+          </div>
+        @else
+          <div class="small muted">Belum disetujui</div>
         @endif
-      </td>
-    </tr>
-  </table>
+      </div>
+    </td>
 
-</body>
-</html>
+    {{-- Stage 2 --}}
+    <td style="width:50%; vertical-align:top; padding-left:16px; border:0;">
+      <div class="sig-title">Disetujui</div>
+      <div class="sig-box" style="height:130px;"> {{-- tinggi diperbesar --}}
+        @if($ptk->approved_stage2_at)
+          @if($stage2File)
+            <img src="{{ $stage2File }}" alt="ttd director" class="sig-img" style="height:115px; top:-12px;">
+          @endif
+          <div class="small" style="margin-top:-4px;">
+            <div>{{ $u2->name ?? '' }}</div>
+            <div>{{ $ptk->approved_stage2_at->format('d M Y H:i') }}</div>
+          </div>
+        @else
+          <div class="small muted">Belum disetujui</div>
+        @endif
+      </div>
+    </td>
+  </tr>
+</table>
+
+{{-- spacer fisik agar footer tidak menimpa tanggal, aman di semua PDF engine --}}
+<div style="height:18px;"></div>
+
+{{-- ====== FOOTER AUDIT + QR ====== --}}
+<div class="hr" style="margin:0 0 8px 0;"></div>
+<table style="width:100%; border-collapse:separate; border-spacing:0;">
+  <tr>
+    <td class="small muted" style="border:1px solid #d7dbe1; padding:8px 10px; vertical-align:top;">
+      Dokumen hash: {{ $docHash }}<br>
+      Dicetak: {{ now()->format('d M Y H:i') }} · IP: {{ request()->ip() }}
+    </td>
+    <td style="text-align:right; border:0; vertical-align:top; padding-left:10px;">
+      @if(!empty($qrBase64))
+        <img src="{{ $qrBase64 }}" style="width:90px; height:90px;">
+        <div class="small muted" style="margin-top:2px;">{{ $verifyUrl }}</div>
+      @endif
+    </td>
+  </tr>
+</table>

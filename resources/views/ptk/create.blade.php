@@ -5,14 +5,24 @@
   <form method="post" enctype="multipart/form-data" action="{{ route('ptk.store') }}" class="grid grid-cols-1 md:grid-cols-2 gap-4">
     @csrf
 
-    {{-- Nomor dibuat otomatis saat approve --}}
-    <div class="md:col-span-2">
-      <label class="block text-sm text-gray-500">Nomor</label>
-      <input disabled value="(otomatis saat approve)" class="border p-2 rounded w-full opacity-60">
+    {{-- NOMOR PTK (required) --}}
+    <div class="md:col-span-2 mb-3">
+      <label class="block text-sm font-medium">Nomor PTK <span class="text-red-500">*</span></label>
+      <input
+        type="text"
+        name="number"
+        value="{{ old('number', $ptk->number ?? '') }}"
+        class="w-full border rounded px-3 py-2"
+        required
+        placeholder="contoh: PTK/QC/2025/10/001">
+      <p class="text-xs text-gray-500 mt-1">
+        Nomor diisi manual oleh admin saat membuat PTK.
+      </p>
+      @error('number')<div class="text-red-600 text-sm">{{ $message }}</div>@enderror
     </div>
 
     <label for="title">Judul
-      <input id="title" type="text" name="title" class="border p-2 rounded w-full" required value="{{ old('title') }}">
+      <input id="title" type="text" name="title" class="border p-2 rounded w-full" required value="{{ old('title') }}" maxlength="200">
       @error('title') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
@@ -33,7 +43,7 @@
       @error('subcategory_id') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
-    {{-- Departemen: SELALU selectable untuk semua role --}}
+    {{-- Departemen: selectable untuk semua role --}}
     <label for="department_id">Departemen
       <select id="department_id" name="department_id" class="border p-2 rounded w-full" required>
         <option value="">-- pilih --</option>
@@ -44,7 +54,7 @@
       @error('department_id') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
-    {{-- PIC: TIDAK di-disabled untuk role apa pun --}}
+    {{-- PIC --}}
     <label for="pic_user_id">PIC
       <select id="pic_user_id" name="pic_user_id" class="border p-2 rounded w-full" required>
         <option value="">-- pilih --</option>
@@ -56,7 +66,7 @@
     </label>
 
     <label for="due_date">Due date
-      <input id="due_date" type="date" name="due_date" class="border p-2 rounded w-full" value="{{ old('due_date') }}">
+      <input id="due_date" type="date" name="due_date" class="border p-2 rounded w-full" value="{{ old('due_date') }}" required>
       @error('due_date') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 

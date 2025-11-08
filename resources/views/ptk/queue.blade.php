@@ -1,9 +1,27 @@
 <x-layouts.app>
+  @php
+    /** @var \Illuminate\Support\Collection|\Illuminate\Pagination\LengthAwarePaginator $items */
+    $user = auth()->user();
+    $asCollection = $items instanceof \Illuminate\Support\Collection ? $items : collect($items);
+
+    $isStage1 = $user?->hasAnyRole(['kabag_qc','manager_hr']);
+    $isStage2 = $user?->hasRole('director');
+
+    $stageLabel = $isStage1 ? 'Approver (Stage 1)' : ($isStage2 ? 'Director (Stage 2)' : 'semua');
+
+    // Filter sesuai role (bila diperlukan)
+    $rows = $asCollection->when($isStage1, fn($c) =>
+        $c->where('status', 'Submitted')->whereNull('approved_stage1_at')
+    )->when($isStage2, fn($c) =>
+        $c->where('status', 'Waiting Director')->whereNull('approved_stage2_at')
+    );
+  @endphp
+
   <div class="flex items-center justify-between mb-4">
     <div>
       <h2 class="text-xl font-semibold">Antrian Persetujuan</h2>
       <p class="text-sm text-gray-500">
-        Stage: <strong>{{ $stage ?? 'semua' }}</strong>
+        Stage: <strong>{{ $stageLabel }}</strong>
       </p>
     </div>
 
@@ -28,7 +46,7 @@
     </thead>
 
     <tbody>
-      @forelse($items as $row)
+      @forelse($rows as $row)
         <tr class="border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50">
           <td class="py-2 px-3">{{ $row->number ?? '—' }}</td>
 
@@ -49,7 +67,6 @@
               x-init="
                 // baca state awal dari localStorage
                 ready = (localStorage.getItem('ptk-previewed-{{ $row->id }}') === '1');
-
                 // saat tab kembali fokus, sinkron ulang dari localStorage
                 window.addEventListener('focus', () => {
                   ready = (localStorage.getItem('ptk-previewed-{{ $row->id }}') === '1');
@@ -79,17 +96,18 @@
               </button>
             </form>
 
-            {{-- REJECT --}}
-            <form method="POST" action="{{ route('ptk.reject', $row) }}" class="inline"
-                  x-on:submit="localStorage.removeItem('ptk-previewed-{{ $row->id }}')">
-              @csrf
-              <button type="submit"
-                class="px-3 py-1 rounded transition"
-                :class="ready ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-gray-300 text-gray-600 cursor-not-allowed'"
-                :disabled="!ready">
-                Reject
-              </button>
-            </form>
+            {{-- REJECT (buka modal) --}}
+            <button type="button"
+              class="px-3 py-1 rounded transition"
+              :class="ready ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-gray-300 text-gray-600 cursor-not-allowed'"
+              :disabled="!ready"
+              @click.prevent="
+                if (ready) {
+                  $dispatch('open-reject-modal', { id: {{ $row->id }} });
+                }
+              ">
+              Reject
+            </button>
           </td>
           {{-- === /AKSI === --}}
         </tr>
@@ -100,6 +118,40 @@
       @endforelse
     </tbody>
   </table>
+
+  {{-- === Modal Reject (global satu kali) === --}}
+  <div
+    x-data="{ open:false, id:null }"
+    x-on:open-reject-modal.window="
+      open = true;
+      id = $event.detail.id;
+      // fokus textarea saat modal terbuka (sedikit delay untuk render)
+      setTimeout(() => { $refs.reason?.focus(); }, 50);
+    "
+    x-cloak
+  >
+    <form
+      method="POST"
+      :action="id ? '{{ url('ptk') }}/' + id + '/reject' : '#'"
+      class="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4"
+      x-show="open"
+      @keydown.escape.window="open=false"
+      x-on:submit="localStorage.removeItem('ptk-previewed-' + id)"
+    >
+      @csrf
+      <div class="bg-white dark:bg-gray-900 w-full max-w-md rounded shadow p-4 mt-24">
+        <h3 class="font-semibold mb-2">Alasan Reject</h3>
+        <textarea x-ref="reason" name="reason" class="w-full border dark:border-gray-700 rounded p-2"
+                  required rows="4" placeholder="Tuliskan alasan…"></textarea>
+
+        <div class="mt-3 flex justify-end gap-2">
+          <button type="button" class="px-3 py-1 rounded bg-gray-200 dark:bg-gray-700"
+                  @click="open=false">Batal</button>
+          <button type="submit" class="px-3 py-1 rounded bg-red-600 text-white">Kirim</button>
+        </div>
+      </div>
+    </form>
+  </div>
 
   {{-- Satu blok script saja: init DataTables + re-init Alpine --}}
   <script>

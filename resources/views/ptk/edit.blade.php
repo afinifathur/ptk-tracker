@@ -1,13 +1,29 @@
 {{-- resources/views/ptk/edit.blade.php --}}
 <x-layouts.app>
-  <h2 class="text-xl font-semibold mb-4">Edit PTK {{ $ptk->number }}</h2>
+  <h2 class="text-xl font-semibold mb-4">Edit PTK {{ $ptk->number ?? '—' }}</h2>
 
   <form method="post" enctype="multipart/form-data" action="{{ route('ptk.update', $ptk) }}" class="grid grid-cols-1 md:grid-cols-2 gap-4">
     @csrf
     @method('PUT')
 
+    {{-- NOMOR PTK (required) --}}
+    <div class="md:col-span-2 mb-1">
+      <label class="block text-sm font-medium">Nomor PTK <span class="text-red-500">*</span></label>
+      <input
+        type="text"
+        name="number"
+        value="{{ old('number', $ptk->number) }}"
+        class="w-full border rounded px-3 py-2"
+        required
+        placeholder="contoh: PTK/QC/2025/10/001">
+      <p class="text-xs text-gray-500 mt-1">
+        Nomor wajib unik. Jika perlu koreksi format, ubah di sini.
+      </p>
+      @error('number') <div class="text-red-600 text-sm">{{ $message }}</div> @enderror
+    </div>
+
     <label for="title">Judul
-      <input id="title" type="text" name="title" class="border p-2 rounded w-full" required
+      <input id="title" type="text" name="title" class="border p-2 rounded w-full" required maxlength="200"
              value="{{ old('title', $ptk->title) }}">
       @error('title') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
@@ -57,7 +73,7 @@
     </label>
 
     <label for="due_date">Due date
-      <input id="due_date" type="date" name="due_date" class="border p-2 rounded w-full"
+      <input id="due_date" type="date" name="due_date" class="border p-2 rounded w-full" required
              value="{{ old('due_date', optional($ptk->due_date)->format('Y-m-d')) }}">
       @error('due_date') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
