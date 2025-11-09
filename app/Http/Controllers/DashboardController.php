@@ -12,7 +12,7 @@ class DashboardController extends Controller
     {
         $user = auth()->user();
 
-        // Periode 26 minggu ke belakang
+        // Periode 26 minggu ke belakang (untuk tren mingguan & KPI lainnya)
         $from = now()->copy()->subWeeks(26)->startOfWeek();
         $to   = now();
 
@@ -133,6 +133,33 @@ class DashboardController extends Controller
             ]);
 
         // =========================================================
+        // DONUT: Jumlah PTK per Departemen (6 bulan terakhir)
+        // =========================================================
+        $donutTo   = now()->endOfDay();
+        $donutFrom = now()->copy()->subMonths(6)->startOfDay();
+
+        // Hitung per departemen menggunakan builder yang sudah tervisibilitas (tanpa N+1)
+        $deptCounts = (clone $base)
+            ->with('department:id,name')
+            ->whereBetween('created_at', [$donutFrom, $donutTo])
+            ->selectRaw('department_id, COUNT(*) as total')
+            ->groupBy('department_id')
+            ->orderByDesc('total')
+            ->get()
+            ->map(fn($r) => [
+                'name'  => $r->department->name ?? '-',
+                'total' => (int) $r->total,
+            ]);
+
+        // Siapkan data untuk Chart.js (labels & data series)
+        $deptLabels = $deptCounts->pluck('name')->toArray();
+        $deptSeries = $deptCounts->pluck('total')->toArray();
+
+        // Jika ingin batasi, contoh top 6:
+        // $deptLabels = array_slice($deptLabels, 0, 6);
+        // $deptSeries = array_slice($deptSeries, 0, 6);
+
+        // =========================================================
         // Render ke View
         // =========================================================
         return view('dashboard', [
@@ -150,6 +177,12 @@ class DashboardController extends Controller
             'from'             => $from,
             'to'               => $to,
             'overdueTop'       => $overdueTop,
+
+            // --- donut chart ---
+            'deptLabels'       => $deptLabels,
+            'deptSeries'       => $deptSeries,
+            'donutFrom'        => $donutFrom,
+            'donutTo'          => $donutTo,
         ]);
     }
 }
