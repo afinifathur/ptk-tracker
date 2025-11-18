@@ -114,8 +114,8 @@
       @foreach ([
         '1. Deskripsi Ketidaksesuaian' => $ptk->desc_nc,
         '2. Evaluasi Masalah (Analisis)' => $ptk->evaluation,
-        '3a. Tindakan Koreksi' => $ptk->action_correction,
-        '3b. Tindakan Korektif' => $ptk->action_corrective,
+        '3a. Tindakan Koreksi dan Tindakan Korektif' => $ptk->action_correction,
+        '4. Hasil Uji Coba' => $ptk->action_corrective,
       ] as $title => $content)
         <div>
           <h2 class="font-semibold mb-2">{{ $title }}</h2>

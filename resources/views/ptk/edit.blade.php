@@ -103,12 +103,12 @@
       @error('evaluation') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
-    <label class="md:col-span-2">3a. Koreksi (perbaikan masalah)
+    <label class="md:col-span-2">3a. Koreksi (perbaikan masalah) dan Tindakan Korektif (akar masalah)
       <textarea name="action_correction" rows="5" class="border p-2 rounded w-full">{{ old('action_correction', $ptk->action_correction ?? '') }}</textarea>
       @error('action_correction') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>
 
-    <label class="md:col-span-2">3b. Tindakan Korektif (akar masalah)
+    <label class="md:col-span-2">4. Hasil Uji Coba
       <textarea name="action_corrective" rows="5" class="border p-2 rounded w-full">{{ old('action_corrective', $ptk->action_corrective ?? '') }}</textarea>
       @error('action_corrective') <small class="text-red-600">{{ $message }}</small> @enderror
     </label>

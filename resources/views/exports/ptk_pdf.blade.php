@@ -111,11 +111,11 @@
     <tr><td>{!! nl2br(e($ptk->evaluation ?? '-')) !!}</td></tr>
   </table>
   <table class="mb10">
-    <tr><th>3a) Koreksi (Perbaikan Masalah)</th></tr>
+    <tr><th>3a) Koreksi (Perbaikan Masalah) dan Tindakan Korektif (Akar Masalah)</th></tr>
     <tr><td>{!! nl2br(e($ptk->action_correction ?? '-')) !!}</td></tr>
   </table>
   <table class="mb10">
-    <tr><th>3b) Tindakan Korektif (Akar Masalah)</th></tr>
+    <tr><th>4) Hasil Uji Coba</th></tr>
     <tr><td>{!! nl2br(e($ptk->action_corrective ?? '-')) !!}</td></tr>
   </table>
 
