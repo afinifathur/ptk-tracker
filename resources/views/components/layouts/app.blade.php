@@ -43,6 +43,8 @@
         <a href="{{ route('dashboard') }}">Dashboard</a>
         <a href="{{ route('ptk.index') }}">Daftar PTK</a>
         <a href="{{ route('ptk.kanban') }}">Kanban</a>
+        <a href="{{ route('exports.range.form') }}">Laporan Periode</a>
+       
 
         @can('ptk.create')
           @unlessrole('director')
@@ -55,7 +57,7 @@
             <a href="{{ route('ptk.queue') }}">Antrian Persetujuan</a>
           @endcan
 
-          <a href="{{ route('exports.range.form') }}">Laporan Periode</a>
+       
 
           @can('menu.audit')
             <a href="{{ route('exports.audits.index') }}">Audit Log</a>
