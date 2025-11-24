@@ -35,7 +35,8 @@
         @can('delete', $ptk)
           <form method="POST" action="{{ route('ptk.destroy', $ptk) }}"
                 onsubmit="return confirm('Yakin hapus PTK ini?')" class="inline">
-            @csrf @method('DELETE')
+            @csrf
+            @method('DELETE')
             <button class="px-3 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700">
               Delete
             </button>
@@ -126,58 +127,110 @@
       @endforeach
     </div>
 
+    {{-- Lampiran (sudah dipatch) --}}
     {{-- Lampiran --}}
-    <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow">
-      <h2 class="font-semibold mb-3">Lampiran</h2>
+<div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow">
+  <h2 class="font-semibold mb-3">Lampiran</h2>
 
-      @if($ptk->attachments->count())
-        <ul class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-          @foreach($ptk->attachments as $att)
-            @php
-              $url   = Storage::url($att->path);
-              $mime  = strtolower($att->mime ?? '');
-              $isImg = str_starts_with($mime, 'image/');
-            @endphp
+  @if($ptk->attachments->count())
+    <ul class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+      @foreach($ptk->attachments as $att)
+        @php
+          // URL file (pakai disk public + asset)
+          $url   = asset(Storage::url($att->path));
+          $mime  = strtolower($att->mime ?? '');
+          $isImg = str_starts_with($mime, 'image/');
 
-            <li class="group">
-              @if($isImg)
-                <button type="button"
-                        class="block w-full aspect-[4/3] overflow-hidden rounded-lg ring-1 ring-gray-200 dark:ring-gray-700"
-                        x-on:click="imgSrc='{{ $url }}'; imgCaption='{{ $att->original_name }}'; preview=true">
-                  <img src="{{ $url }}" alt="{{ $att->original_name }}"
-                       class="w-full h-full object-cover group-hover:scale-105 transition"/>
-                </button>
-              @else
-                <a href="{{ $url }}" target="_blank"
-                   class="flex items-center justify-center w-full aspect-[4/3] rounded-lg ring-1 ring-gray-200 dark:ring-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100">
-                  <span class="text-xs">
-                    {{ strtoupper(pathinfo($att->original_name, PATHINFO_EXTENSION)) }}
-                  </span>
-                </a>
-              @endif
-              <div class="mt-1 text-xs truncate text-gray-700 dark:text-gray-200"
-                   title="{{ $att->original_name }}">
-                   {{ $att->original_name }}
-              </div>
-            </li>
-          @endforeach
-        </ul>
-      @else
-        <div class="text-sm text-gray-500">Tidak ada lampiran</div>
-      @endif
-    </div>
+          // OPTIONAL: kalau kamu yakin pakai disk `public`, boleh dipakai.
+          // Kalau tidak yakin, bisa set $exists = true saja supaya tidak menghalangi klik.
+          try {
+              $exists = Storage::disk('public')->exists($att->path);
+          } catch (\Throwable $e) {
+              $exists = true; // fallback: anggap ada
+          }
+        @endphp
 
-    {{-- Modal preview gambar --}}
-    <div x-show="preview" x-transition
-         class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-         x-cloak
-         x-on:keydown.escape.window="preview=false">
-      <div class="relative max-w-5xl w-full">
-        <button class="absolute -top-3 -right-3 bg-white text-gray-700 rounded-full w-8 h-8 shadow"
-                x-on:click="preview=false">✕</button>
-        <img :src="imgSrc" :alt="imgCaption" class="w-full rounded-lg shadow-lg">
-        <div class="mt-2 text-center text-white text-sm" x-text="imgCaption"></div>
-      </div>
+        <li class="group">
+          @if($isImg && $exists)
+            {{-- Tombol untuk preview gambar --}}
+            <button
+  type="button"
+  class="block w-full aspect-[4/3] overflow-hidden rounded-lg ring-1 ring-gray-200 dark:ring-gray-700"
+  x-on:click="
+    preview = true;
+    imgSrc = `{{ $url }}`;
+    imgCaption = `{{ $att->original_name }}`;
+  "
+>
+  <img
+    src="{{ $url }}"
+    alt="{{ $att->original_name }}"
+    loading="lazy"
+    onerror="this.onerror=null;this.src='{{ asset('/storage/placeholders/image-missing.png') }}';"
+    class="w-full h-full object-contain bg-gray-50 group-hover:scale-105 transition"
+  />
+</button>
+
+          @elseif($isImg && ! $exists)
+            {{-- File gambar tidak ditemukan --}}
+            <div class="flex items-center justify-center w-full aspect-[4/3] rounded-lg ring-1 ring-gray-200 dark:ring-gray-700 bg-gray-50 text-gray-500">
+              <span class="text-xs">File tidak ditemukan</span>
+            </div>
+          @else
+            {{-- Non-image file (PDF, DOC, dll) --}}
+            <a
+              href="{{ $url }}"
+              target="_blank"
+              rel="noopener"
+              class="flex items-center justify-center w-full aspect-[4/3] rounded-lg ring-1 ring-gray-200 dark:ring-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
+            >
+              <span class="text-xs">
+                {{ strtoupper(pathinfo($att->original_name, PATHINFO_EXTENSION)) }}
+              </span>
+            </a>
+          @endif
+
+          <div
+            class="mt-1 text-xs truncate text-gray-700 dark:text-gray-200"
+            title="{{ $att->original_name }}"
+          >
+            {{ $att->original_name }}
+          </div>
+        </li>
+      @endforeach
+    </ul>
+  @else
+    <div class="text-sm text-gray-500">Tidak ada lampiran</div>
+  @endif
+</div>
+
+{{-- Modal preview gambar (gantikan modal lama dengan ini) --}}
+<div
+  x-show="preview"
+  x-transition
+  class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+  x-cloak
+  x-on:keydown.escape.window="preview=false"
+  x-on:click.self="preview=false"     {{-- <-- klik area diluar gambar akan menutup --}}
+  role="dialog" aria-modal="true"
+>
+  <div class="relative max-w-5xl w-full max-h-[90vh] overflow-auto">
+    {{-- CLOSE besar & jelas --}}
+    <button
+      class="absolute -top-3 -right-3 bg-white text-gray-800 rounded-full w-10 h-10 flex items-center justify-center shadow-lg z-50 hover:bg-gray-100"
+      x-on:click="preview=false"
+      aria-label="Close preview"
+      title="Tutup (Esc)"
+    >
+      <!-- bisa diganti dengan ikon SVG jika mau -->
+      ✕
+    </button>
+
+    <div class="bg-white rounded-lg shadow-lg p-4">
+      <img :src="imgSrc" :alt="imgCaption" class="w-full max-h-[75vh] object-contain rounded-md mx-auto">
+      <div class="mt-2 text-center text-sm text-gray-800" x-text="imgCaption"></div>
     </div>
   </div>
+</div>
+    
 </x-layouts.app>

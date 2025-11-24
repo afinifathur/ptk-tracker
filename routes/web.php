@@ -7,7 +7,8 @@ use App\Http\Controllers\{
     PTKController,
     ApprovalController,
     ExportController,
-    AuditController
+    AuditController,
+    PTKAttachmentController
 };
 use App\Http\Controllers\Settings\CategorySettingsController;
 use App\Models\{PTK, Attachment};
@@ -21,27 +22,33 @@ use App\Models\{PTK, Attachment};
 Route::get('/', fn () => redirect()->route('dashboard'));
 
 Route::middleware('auth')->group(function () {
-    // ======================
-    // Dashboard
-    // ======================
+
+    /*
+    |--------------------------------------------------------------------------
+    | Dashboard
+    |--------------------------------------------------------------------------
+    */
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
-    // ======================
-    // PTK CRUD
-    // ======================
+
+    /*
+    |--------------------------------------------------------------------------
+    | PTK CRUD
+    |--------------------------------------------------------------------------
+    */
     Route::resource('ptk', PTKController::class);
 
     // Kanban + update status cepat
     Route::get('ptk-kanban', [PTKController::class, 'kanban'])->name('ptk.kanban');
     Route::post('ptk/{ptk}/status', [PTKController::class, 'quickStatus'])->name('ptk.status');
 
-    // Antrian persetujuan (stage optional: approver|director)
+    // Antrian approval
     Route::get('ptk-queue/{stage?}', [PTKController::class, 'queue'])
         ->whereIn('stage', ['approver', 'director'])
         ->name('ptk.queue')
         ->middleware('permission:menu.queue');
 
-    // Recycle bin + restore + hapus permanen
+    // Recycle bin
     Route::get('ptk-recycle', [PTKController::class, 'recycle'])
         ->name('ptk.recycle')
         ->middleware('permission:menu.recycle');
@@ -49,14 +56,17 @@ Route::middleware('auth')->group(function () {
     Route::post('ptk/{id}/restore', [PTKController::class, 'restore'])->name('ptk.restore');
     Route::delete('ptk/{id}/force', [PTKController::class, 'forceDelete'])->name('ptk.force');
 
-    // Import PTK (dibatasi rate upload)
+    // Import PTK
     Route::post('ptk-import', [PTKController::class, 'import'])
         ->name('ptk.import')
         ->middleware('throttle:uploads');
 
-    // ======================
-    // Approval & Submit
-    // ======================
+
+    /*
+    |--------------------------------------------------------------------------
+    | Approval & Submit
+    |--------------------------------------------------------------------------
+    */
     Route::post('ptk/{ptk}/approve', [ApprovalController::class, 'approve'])
         ->name('ptk.approve')
         ->middleware('permission:ptk.approve');
@@ -65,17 +75,20 @@ Route::middleware('auth')->group(function () {
         ->name('ptk.reject')
         ->middleware('permission:ptk.reject');
 
-    // Tombol "Submit PTK" (halaman detail)
     Route::post('ptk/{ptk}/submit', [PTKController::class, 'submit'])
         ->name('ptk.submit');
 
-    // ======================
-    // Settings: Kategori & Subkategori
-    // ======================
+
+    /*
+    |--------------------------------------------------------------------------
+    | Settings: Kategori & Subkategori
+    |--------------------------------------------------------------------------
+    */
     Route::prefix('settings')
         ->name('settings.')
         ->controller(CategorySettingsController::class)
         ->group(function () {
+
             // Kategori
             Route::get('categories', 'index')->name('categories');
             Route::post('categories', 'storeCategory')->name('categories.store');
@@ -88,62 +101,84 @@ Route::middleware('auth')->group(function () {
             Route::delete('subcategories/{subcategory}', 'deleteSubcategory')->name('subcategories.delete');
         });
 
-    // ======================
-    // API: Dependent dropdown
-    // ======================
+
+    /*
+    |--------------------------------------------------------------------------
+    | API Dropdown Dinamis
+    |--------------------------------------------------------------------------
+    */
     Route::get('api/subcategories', [CategorySettingsController::class, 'apiSubcategories'])
         ->name('api.subcategories');
 
-    // ======================
-    // Exports (+ Audit)
-    // ======================
-    // PREVIEW (inline stream)
+
+    /*
+    |--------------------------------------------------------------------------
+    | Export (Preview, PDF, Range Report)
+    |--------------------------------------------------------------------------
+    */
     Route::get('exports/preview/{ptk}', [ExportController::class, 'preview'])
         ->name('exports.preview');
 
-    // DOWNLOAD (PDF)
     Route::get('exports/pdf/{ptk}', [ExportController::class, 'pdf'])
         ->name('exports.pdf');
 
-    // Laporan rentang tanggal
     Route::prefix('exports')->name('exports.')->group(function () {
+
+        // Range laporan
         Route::get('range',  [ExportController::class, 'rangeForm'])->name('range.form');
         Route::post('range', [ExportController::class, 'rangeReport'])->name('range.report');
 
+        // Export Excel & PDF
         Route::get('excel',        [ExportController::class, 'excel'])->name('excel');
         Route::post('range/excel', [ExportController::class, 'rangeExcel'])->name('range.excel');
         Route::post('range/pdf',   [ExportController::class, 'rangePdf'])->name('range.pdf');
 
-        // Audit
+        // Audit Log
         Route::get('audits', [AuditController::class, 'index'])
             ->name('audits.index')
             ->middleware('permission:menu.audit');
     });
 
+
     /*
     |--------------------------------------------------------------------------
-    | 📷 Caption Attachment (inline edit)
+    | Caption Attachment (Inline Update)
     |--------------------------------------------------------------------------
     */
     Route::patch('attachments/{attachment}/caption', function (Request $r, Attachment $attachment) {
-        // pastikan user boleh update PTK terkait
+
         abort_unless(auth()->user()->can('update', $attachment->ptk), 403);
 
-        $data = $r->validate(['caption' => 'nullable|string|max:255']);
+        $data = $r->validate([
+            'caption' => 'nullable|string|max:255'
+        ]);
+
         $attachment->update($data);
 
         return back()->with('ok', 'Caption tersimpan.');
     })->name('attachments.caption');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Hapus Lampiran PTK (Route Baru)
+    |--------------------------------------------------------------------------
+    */
+    Route::delete('/ptk-attachment/{id}', [PTKAttachmentController::class, 'destroy'])
+        ->name('ptk.attachment.delete');
+
 });
 
 require __DIR__ . '/auth.php';
 
+
 /*
 |--------------------------------------------------------------------------
-| 🧩 Verifikasi Dokumen (Publik)
+| Verifikasi Dokumen (Publik)
 |--------------------------------------------------------------------------
 */
 Route::get('/verify/{ptk}/{hash}', function (PTK $ptk, string $hash) {
+
     $expected = hash('sha256', json_encode([
         'id'          => $ptk->id,
         'number'      => $ptk->number,
@@ -161,4 +196,5 @@ Route::get('/verify/{ptk}/{hash}', function (PTK $ptk, string $hash) {
         'expected' => $expected,
         'hash'     => $hash,
     ]);
+
 })->name('verify.show');

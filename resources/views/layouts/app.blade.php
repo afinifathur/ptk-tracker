@@ -5,6 +5,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  {{-- CSRF token (untuk fetch / form / axios, dll) --}}
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+
   <title>PTK Tracker</title>
 
   {{-- Vite assets --}}
@@ -60,7 +64,7 @@
         @endcan
 
         @can('menu.queue')
-          <a href="{{ route('ptk.queue') }}">Recycle Bin</a>
+          <a href="{{ route('ptk.queue') }}">Antrian Approval</a>
         @endcan
 
         @can('menu.recycle')
@@ -89,23 +93,40 @@
 
         @auth
           <div class="relative">
-            <button x-on:click="open = !open"
-                    class="flex items-center space-x-2 px-3 py-2 bg-gray-200 dark:bg-gray-800 rounded hover:bg-gray-300 dark:hover:bg-gray-700">
+            <button
+              x-on:click="open = !open"
+              class="flex items-center space-x-2 px-3 py-2 bg-gray-200 dark:bg-gray-800 rounded hover:bg-gray-300 dark:hover:bg-gray-700"
+            >
               <span class="font-semibold">{{ auth()->user()->name }}</span>
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              <svg xmlns="http://www.w3.org/2000/svg"
+                   class="w-4 h-4"
+                   fill="none"
+                   viewBox="0 0 24 24"
+                   stroke="currentColor"
+                   aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M19 9l-7 7-7-7" />
               </svg>
             </button>
 
-            <div x-show="open" x-transition x-cloak
-                 class="absolute right-0 mt-2 w-44 bg-white dark:bg-gray-800 border rounded-lg shadow-lg py-2 z-50">
+            <div
+              x-show="open"
+              x-transition
+              x-cloak
+              class="absolute right-0 mt-2 w-44 bg-white dark:bg-gray-800 border rounded-lg shadow-lg py-2 z-50"
+            >
               <div class="px-4 py-2 text-sm text-gray-700 dark:text-gray-200 border-b">
                 <div class="font-semibold">{{ auth()->user()->name }}</div>
-                <div class="text-xs text-gray-500">{{ auth()->user()->roles->pluck('name')->join(', ') }}</div>
+                <div class="text-xs text-gray-500">
+                  {{ auth()->user()->roles->pluck('name')->join(', ') }}
+                </div>
               </div>
               <form method="POST" action="{{ route('logout') }}" class="mt-1">
                 @csrf
-                <button type="submit" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
+                <button
+                  type="submit"
+                  class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
                   🚪 Logout
                 </button>
               </form>
@@ -116,15 +137,15 @@
     </header>
 
     @if(session('ok'))
-      <div class="p-3 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 rounded mb-4" role="status" aria-live="polite">
+      <div class="p-3 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 rounded mb-4"
+           role="status"
+           aria-live="polite">
         {{ session('ok') }}
       </div>
     @endif
 
     {{ $slot }}
   </div>
-
-  @stack('scripts')
 
   {{-- JS lokal (urutan penting) --}}
   <script src="{{ asset('vendor/polyfill/polyfill.min.js') }}"></script>
@@ -141,6 +162,11 @@
   <script src="{{ asset('vendor/alpine/alpine.min.js') }}" defer></script>
 
   {{-- Uji cepat Alpine --}}
-  <script>document.addEventListener('alpine:init', () => console.log('Alpine OK'));</script>
+  <script>
+    document.addEventListener('alpine:init', () => console.log('Alpine OK'));
+  </script>
+
+  {{-- Script tambahan per-halaman --}}
+  @stack('scripts')
 </body>
 </html>
