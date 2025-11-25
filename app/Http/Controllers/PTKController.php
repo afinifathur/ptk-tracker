@@ -27,14 +27,48 @@ class PTKController extends Controller
     }
 
     # =========================================================
-    # INDEX — daftar PTK (pakai scope visibleTo)
+    # INDEX — daftar PTK (pakai scope visibleTo) + role_filter
     # =========================================================
     public function index(Request $request): View
     {
+        // Base query dengan eager load dan scope visibleTo (akses)
         $base = PTK::with(['department','category','subcategory','pic'])
-            ->visibleTo(auth()->user());
+            ->visibleTo($request->user());
 
-        $ptks = $base->latest('created_at')->paginate(self::PER_PAGE);
+        // Free-text search (number OR title)
+        if ($q = $request->query('q')) {
+            $base->where(function ($qb) use ($q) {
+                $qb->where('number', 'like', "%{$q}%")
+                   ->orWhere('title', 'like', "%{$q}%");
+            });
+        }
+
+        // Filter status (opsional)
+        if ($status = $request->query('status')) {
+            $base->where('status', $status);
+        }
+
+        // Filter berdasarkan role admin/divisi (role_filter)
+        if ($role = $request->query('role_filter')) {
+            // Ambil user id untuk role tersebut (menggunakan spatie/permission -> User::role())
+            // Jika paket role tidak tersedia, ini bisa diganti sesuai implementasimu.
+            $userIds = User::role($role)->pluck('id')->toArray();
+
+            // Jika tidak ada user dengan role tersebut, hasil akan kosong => tambahkan whereFalse
+            if (empty($userIds)) {
+                // cara paling sederhana: paksa kondisi yang selalu salah
+                $base->whereRaw('0 = 1');
+            } else {
+                $base->where(function ($qb) use ($userIds) {
+                    // PTK yang dibuat oleh user-role tersebut OR PIC yang ditetapkan ke user-role tersebut
+                    $qb->whereIn('created_by', $userIds)
+                       ->orWhereIn('pic_user_id', $userIds);
+                });
+            }
+        }
+
+        // order & paginate (jaga querystring supaya filter tetap ada ketika pindah halaman)
+        $ptks = $base->latest('created_at')->paginate(self::PER_PAGE)->withQueryString();
 
         return view('ptk.index', compact('ptks'));
     }
@@ -305,7 +339,7 @@ class PTKController extends Controller
             'category_id'        => ['required','exists:categories,id'],
             'subcategory_id'     => ['nullable','exists:subcategories,id'],
             'department_id'      => ['required','exists:departments,id'],
-            'pic_user_id'        => ['required','exists:users,id'], // << ditambahkan
+            'pic_user_id'        => ['required','exists:users,id'],
             'due_date'           => ['required','date'],
             'form_date'          => ['required','date'],
             'status'             => ['nullable', Rule::in(self::STATUSES)],
