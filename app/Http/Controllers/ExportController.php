@@ -109,11 +109,14 @@ class ExportController extends Controller
         }, 'ptk.xlsx');
     }
 
-    /** 🔹 PREVIEW satu PTK (inline stream) */
-    public function preview(PTK $ptk)
+    /**
+     * Helper: bangun PDF DomPDF untuk sebuah PTK (mengembalikan instance PDF yang siap stream/download)
+     *
+     * @param PTK $ptk
+     * @return \Barryvdh\DomPDF\PDF
+     */
+    private function buildPdfFor(PTK $ptk)
     {
-        $this->authorize('download', $ptk);
-
         $ptk->load([
             'attachments', 'pic', 'department', 'category', 'subcategory',
             'creator', 'approver', 'director',
@@ -129,6 +132,7 @@ class ExportController extends Controller
         ]));
 
         $verifyUrl = route('verify.show', ['ptk' => $ptk->id, 'hash' => $docHash]);
+
         try {
             $png = QrCode::format('png')->size(120)->generate($verifyUrl);
             $qrBase64 = 'data:image/png;base64,' . base64_encode($png);
@@ -166,6 +170,16 @@ class ExportController extends Controller
 
         $pdf->set_option('isRemoteEnabled', true);
         $pdf->set_option('defaultFont', 'DejaVu Sans');
+
+        return $pdf;
+    }
+
+    /** 🔹 PREVIEW satu PTK (inline stream) */
+    public function preview(PTK $ptk)
+    {
+        $this->authorize('download', $ptk);
+
+        $pdf = $this->buildPdfFor($ptk);
 
         $name = preg_replace('/[\/\\\\]+/', '-', $ptk->number ?: 'PTK-'.$ptk->id) . '.pdf';
         return $pdf->stream($name);
@@ -176,61 +190,25 @@ class ExportController extends Controller
     {
         $this->authorize('download', $ptk);
 
-        $ptk->load([
-            'attachments', 'pic', 'department', 'category', 'subcategory',
-            'creator', 'approver', 'director',
-        ]);
-
-        $docHash = hash('sha256', json_encode([
-            'id'          => $ptk->id,
-            'number'      => $ptk->number,
-            'status'      => $ptk->status,
-            'due'         => $ptk->due_date?->format('Y-m-d'),
-            'approved_at' => $ptk->approved_at?->format('c'),
-            'updated_at'  => $ptk->updated_at?->format('c'),
-        ]));
-
-        $verifyUrl = route('verify.show', ['ptk' => $ptk->id, 'hash' => $docHash]);
-        try {
-            $png = QrCode::format('png')->size(120)->generate($verifyUrl);
-            $qrBase64 = 'data:image/png;base64,' . base64_encode($png);
-        } catch (\Throwable $e) {
-            $qrBase64 = null;
-        }
-
-        $companyLogoBase64 = $this->b64(public_path('brand/logo.png'));
-        $signAdmin    = $this->b64(public_path('brand/signatures/admin.png'));
-        $signApprover = $this->b64(public_path('brand/signatures/approver.png'));
-        $signDirector = $this->b64(public_path('brand/signatures/director.png'));
-
-        $embeds = [];
-        foreach ($ptk->attachments->take(6) as $att) {
-            $mime = strtolower($att->mime ?? '');
-            if (str_starts_with($mime, 'image/')) {
-                $full = Storage::disk('public')->path($att->path);
-                if (is_file($full)) {
-                    $embeds[] = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($full));
-                }
-            }
-        }
-
-        $pdf = Pdf::loadView('exports.ptk_pdf', [
-            'ptk'               => $ptk,
-            'docHash'           => $docHash,
-            'qrBase64'          => $qrBase64,
-            'verifyUrl'         => $verifyUrl,
-            'companyLogoBase64' => $companyLogoBase64,
-            'signAdmin'         => $signAdmin,
-            'signApprover'      => $ptk->approved_at ? $signApprover : null,
-            'signDirector'      => $signDirector,
-            'embeds'            => $embeds,
-        ])->setPaper('a4', 'portrait');
-
-        $pdf->set_option('isRemoteEnabled', true);
-        $pdf->set_option('defaultFont', 'DejaVu Sans');
+        $pdf = $this->buildPdfFor($ptk);
 
         $name = preg_replace('/[\/\\\\]+/', '-', $ptk->number ?: 'PTK-'.$ptk->id) . '.pdf';
         return $pdf->download($name);
+    }
+
+    /**
+     * Preview PDF (inline) berbasis ID — route: /exports/ptk/{id}/preview
+     * Berguna ketika kamu ingin membuka PDF di tab baru berdasarkan id numerik
+     */
+    public function previewPdf($id)
+    {
+        $ptk = PTK::findOrFail($id);
+        $this->authorize('download', $ptk);
+
+        $pdf = $this->buildPdfFor($ptk);
+
+        $name = preg_replace('/[\/\\\\]+/', '-', $ptk->number ?: 'PTK-'.$ptk->id) . '.pdf';
+        return $pdf->stream($name);
     }
 
     /** Laporan Periode (form) */

@@ -116,8 +116,15 @@ Route::middleware('auth')->group(function () {
     | Export (Preview, PDF, Range Report)
     |--------------------------------------------------------------------------
     */
+
+    // existing preview (route-model binding)
     Route::get('exports/preview/{ptk}', [ExportController::class, 'preview'])
         ->name('exports.preview');
+
+    // menampilkan PDF inline di tab baru (preview)
+    // route baru sesuai permintaan: /exports/ptk/{id}/preview
+    Route::get('/exports/ptk/{id}/preview', [ExportController::class, 'previewPdf'])
+        ->name('exports.pdf.preview');
 
     Route::get('exports/pdf/{ptk}', [ExportController::class, 'pdf'])
         ->name('exports.pdf');
