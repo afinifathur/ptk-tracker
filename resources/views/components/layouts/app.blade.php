@@ -40,36 +40,67 @@
 
       {{-- NAV --}}
       <nav class="topnav hidden md:flex space-x-4">
-        <a href="{{ route('dashboard') }}">Dashboard</a>
-        <a href="{{ route('ptk.index') }}">Daftar PTK</a>
-        <a href="{{ route('ptk.kanban') }}">Kanban</a>
-        <a href="{{ route('exports.range.form') }}">Laporan Periode</a>
+         <a href="{{ route('dashboard') }}"
+           class="px-2 py-1 {{ request()->routeIs('dashboard') ? 'font-semibold border-b-2 border-indigo-600' : 'text-gray-700 dark:text-gray-300' }}">
+          Dashboard
+        </a>
+       <a href="{{ route('ptk.index') }}"
+           class="px-2 py-1 {{ request()->routeIs('ptk.index') || request()->routeIs('ptk.show') ? 'font-semibold border-b-2 border-indigo-600' : 'text-gray-700 dark:text-gray-300' }}">
+          Daftar PTK
+        </a>
+         <a href="{{ route('ptk.kanban') }}"
+           class="px-2 py-1 {{ request()->routeIs('ptk.kanban') ? 'font-semibold border-b-2 border-indigo-600' : 'text-gray-700 dark:text-gray-300' }}">
+          Kanban
+        </a>
+        <a href="{{ route('exports.range.form') }}"
+           class="px-2 py-1 {{ request()->routeIs('exports.range.form') ? 'font-semibold border-b-2 border-indigo-600' : 'text-gray-700 dark:text-gray-300' }}">
+          Laporan Periode
+        </a>
        
 
         @can('ptk.create')
           @unlessrole('director')
-            <a href="{{ route('ptk.create') }}">New PTK</a>
+            <a href="{{ route('ptk.create') }}"
+               class="px-2 py-1 {{ request()->routeIs('ptk.create') ? 'font-semibold border-b-2 border-indigo-600' : 'text-gray-700 dark:text-gray-300' }}">
+              New PTK
+            </a>
           @endunlessrole
         @endcan
 
         @unlessrole('admin_qc_flange|admin_qc_fitting|admin_hr|admin_k3')
           @can('menu.queue')
-            <a href="{{ route('ptk.queue') }}">Antrian Persetujuan</a>
-          @endcan
-
+            <a href="{{ route('ptk.queue') }}"
+             class="px-2 py-1 inline-flex items-center gap-2 {{ request()->routeIs('ptk.queue*') ? 'font-semibold border-b-2 border-indigo-600' : 'text-gray-700 dark:text-gray-300' }}">
+            <span>Antrian Persetujuan</span>
+            @if(isset($approvalQueueCount) && $approvalQueueCount > 0)
+              <span class="inline-flex items-center justify-center px-2 py-0.5 text-xs font-semibold rounded-full text-white bg-red-600">
+                {{ $approvalQueueCount }}
+              </span>
+            @endif
+          </a>
+        @endcan
        
 
           @can('menu.audit')
-            <a href="{{ route('exports.audits.index') }}">Audit Log</a>
-          @endcan
+           <a href="{{ route('exports.audits.index') }}"
+             class="px-2 py-1 {{ request()->routeIs('exports.audits.*') ? 'font-semibold border-b-2 border-indigo-600' : 'text-gray-700 dark:text-gray-300' }}">
+            Audit Log
+          </a>
+        @endcan
 
           @hasanyrole('director|kabag_qc|manager_hr|admin_qc_flange|admin_qc_fitting|admin_hr|admin_k3')
-            <a href="{{ route('settings.categories') }}">Settings</a>
-          @endhasanyrole
+            <a href="{{ route('settings.categories') }}"
+             class="px-2 py-1 {{ request()->routeIs('settings.*') ? 'font-semibold border-b-2 border-indigo-600' : 'text-gray-700 dark:text-gray-300' }}">
+            Settings
+          </a>
+        @endhasanyrole
 
           @can('menu.recycle')
-            <a href="{{ route('ptk.recycle') }}">Recycle Bin</a>
-          @endcan
+            <a href="{{ route('ptk.recycle') }}"
+             class="px-2 py-1 {{ request()->routeIs('ptk.recycle') ? 'font-semibold border-b-2 border-indigo-600' : 'text-gray-700 dark:text-gray-300' }}">
+            Recycle Bin
+          </a>
+        @endcan
         @endunlessrole
       </nav>
 

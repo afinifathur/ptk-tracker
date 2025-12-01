@@ -1,5 +1,5 @@
 <x-layouts.app>
-  <div class="space-y-6" x-data="{preview:false, imgSrc:'', imgCaption:''}">
+  <div class="space-y-6" x-data="{ preview:false, imgSrc:'', imgCaption:'', rotate: 0, scale: 1 }">
     {{-- Header & aksi --}}
     <div class="flex items-center justify-between">
       <h1 class="text-xl font-semibold">PTK {{ $ptk->number ?? '-' }}</h1>
@@ -214,32 +214,72 @@
       @endif
     </div>
 
-    {{-- Modal preview gambar (gantikan modal lama dengan ini) --}}
-    <div
-      x-show="preview"
-      x-transition
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-      x-cloak
-      x-on:keydown.escape.window="preview=false"
-      x-on:click.self="preview=false"     {{-- <-- klik area diluar gambar akan menutup --}}
-      role="dialog" aria-modal="true"
-    >
-      <div class="relative max-w-5xl w-full max-h-[90vh] overflow-auto">
-        {{-- CLOSE besar & jelas --}}
-        <button
-          class="absolute -top-3 -right-3 bg-white text-gray-800 rounded-full w-10 h-10 flex items-center justify-center shadow-lg z-50 hover:bg-gray-100"
-          x-on:click="preview=false"
-          aria-label="Close preview"
-          title="Tutup (Esc)"
-        >
-          ✕
-        </button>
+  {{-- Modal preview (overlay gelap tapi tombol tetap terang) --}}
+<div
+  x-show="preview"
+  x-transition.opacity
+  x-cloak
+  x-data
+  x-on:keydown.escape.window="preview=false; rotate = 0; scale = 1"
+  x-on:click.self="preview=false; rotate = 0; scale = 1"
+  class="fixed inset-0 z-[9990] flex items-center justify-center"
+  role="dialog"
+  aria-modal="true"
+>
+    {{-- Overlay gelap di belakang --}}
+    <div class="absolute inset-0 bg-black/70 z-[9990]"></div>
 
-        <div class="bg-white rounded-lg shadow-lg p-4">
-          <img :src="imgSrc" :alt="imgCaption" class="w-full max-h-[75vh] object-contain rounded-md mx-auto">
-          <div class="mt-2 text-center text-sm text-gray-800" x-text="imgCaption"></div>
+    {{-- Konten modal di atas overlay --}}
+    <div class="relative z-[10000] w-full max-w-[98vw] max-h-[98vh] mx-4 flex items-center justify-center">
+        
+        {{-- AREA GAMBAR --}}
+        <div class="flex items-center justify-center overflow-hidden rounded-md bg-transparent"
+             style="width: 100%; height: 100%;">
+          <img
+            :src="imgSrc"
+            :alt="imgCaption"
+            class="block object-contain select-none"
+            :style="`
+                transform: rotate(${rotate}deg) scale(${scale});
+                max-width: calc(100vw - 100px);
+                max-height: calc(100vh - 100px);
+                transition: transform .18s ease;
+            `"
+          />
         </div>
-      </div>
+
+        {{-- PANEL TOMBOL --}}
+        <div class="ml-4 flex flex-col gap-2 items-stretch z-[10001]">
+            <button class="px-3 py-2 bg-white text-gray-800 rounded shadow"
+                    x-on:click="rotate = (rotate - 45) % 360">
+                ⟲ Rotate Left
+            </button>
+
+            <button class="px-3 py-2 bg-white text-gray-800 rounded shadow"
+                    x-on:click="rotate = (rotate + 45) % 360">
+                ⟳ Rotate Right
+            </button>
+
+            <button class="px-3 py-2 bg-white text-gray-800 rounded shadow"
+                    x-on:click="rotate = 0; scale = 1">
+                ↺ Reset
+            </button>
+
+            {{-- Zoom --}}
+            <div class="bg-white p-3 rounded shadow mt-2">
+                <div class="text-xs text-gray-700 mb-2">
+                    Zoom: <span x-text="Math.round(scale*100) + '%'"></span>
+                </div>
+                <input type="range" min="0.2" max="2" step="0.05" x-model.number="scale" class="w-36">
+            </div>
+
+            <button class="px-3 py-2 mt-3 bg-white text-gray-800 rounded shadow"
+                    x-on:click="preview=false; rotate=0; scale=1">
+                ✕ Close
+            </button>
+        </div>
     </div>
+</div>
+
   </div>
 </x-layouts.app>

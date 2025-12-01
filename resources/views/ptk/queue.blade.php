@@ -61,53 +61,50 @@
           <td class="py-2 px-3">{{ $row->status ?? '-' }}</td>
           <td class="py-2 px-3 whitespace-nowrap">{{ $row->due_date?->format('Y-m-d') ?? '-' }}</td>
 
-          {{-- === AKSI (sinkron localStorage + fokus tab) === --}}
-          <td class="px-3 py-2 text-center space-x-2"
-              x-data="{ ready: false }"
-              x-init="
-                // baca state awal dari localStorage
-                ready = (localStorage.getItem('ptk-previewed-{{ $row->id }}') === '1');
-                // saat tab kembali fokus, sinkron ulang dari localStorage
-                window.addEventListener('focus', () => {
-                  ready = (localStorage.getItem('ptk-previewed-{{ $row->id }}') === '1');
-                });
-              ">
+          {{-- === AKSI (rapi inline buttons + localStorage sync + fokus tab) === --}}
+          <td class="px-3 py-2 text-center">
+            <div class="flex items-center justify-center gap-2" x-data="{ ready: false }"
+                 x-init="
+                   // baca state awal dari localStorage
+                   ready = (localStorage.getItem('ptk-previewed-{{ $row->id }}') === '1');
+                   window.addEventListener('focus', () => {
+                     ready = (localStorage.getItem('ptk-previewed-{{ $row->id }}') === '1');
+                   });
+                 ">
 
-            {{-- PREVIEW: buka tab baru + set flag SEBELUM tab terbuka --}}
-            <a href="{{ route('exports.preview', $row) }}"
-               target="_blank" rel="noopener noreferrer"
-               class="inline-block px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-               x-on:click="
-                 localStorage.setItem('ptk-previewed-{{ $row->id }}','1');
-                 ready = true;
-               ">
-               Preview
-            </a>
+              {{-- PREVIEW: buka tab baru + set flag sebelum tab terbuka --}}
+              <a href="{{ route('exports.preview', $row) }}"
+                 target="_blank" rel="noopener noreferrer"
+                 class="inline-flex items-center justify-center px-3 py-1 text-sm font-medium rounded shadow-sm
+                        bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                 x-on:click="localStorage.setItem('ptk-previewed-{{ $row->id }}','1'); ready = true;">
+                Preview
+              </a>
 
-            {{-- APPROVE --}}
-            <form method="POST" action="{{ route('ptk.approve', $row) }}" class="inline"
-                  x-on:submit="localStorage.removeItem('ptk-previewed-{{ $row->id }}')">
-              @csrf
-              <button type="submit"
-                class="px-3 py-1 rounded transition"
-                :class="ready ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-300 text-gray-600 cursor-not-allowed'"
-                :disabled="!ready">
-                Approve
+              {{-- APPROVE: form submit --}}
+              <form method="POST" action="{{ route('ptk.approve', $row) }}" class="inline-block"
+                    x-on:submit="localStorage.removeItem('ptk-previewed-{{ $row->id }}')">
+                @csrf
+                <button type="submit"
+                  :disabled="!ready"
+                  :class="ready
+                    ? 'inline-flex items-center justify-center px-3 py-1 text-sm font-medium rounded shadow-sm bg-green-600 text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300'
+                    : 'inline-flex items-center justify-center px-3 py-1 text-sm font-medium rounded bg-gray-200 text-gray-500 cursor-not-allowed opacity-60'">
+                  Approve
+                </button>
+              </form>
+
+              {{-- REJECT: modal trigger --}}
+              <button type="button"
+                :disabled="!ready"
+                :class="ready
+                  ? 'inline-flex items-center justify-center px-3 py-1 text-sm font-medium rounded shadow-sm bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-300'
+                  : 'inline-flex items-center justify-center px-3 py-1 text-sm font-medium rounded bg-gray-200 text-gray-500 cursor-not-allowed opacity-60'"
+                @click.prevent="if (ready) $dispatch('open-reject-modal', { id: {{ $row->id }} })">
+                Reject
               </button>
-            </form>
 
-            {{-- REJECT (buka modal) --}}
-            <button type="button"
-              class="px-3 py-1 rounded transition"
-              :class="ready ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-gray-300 text-gray-600 cursor-not-allowed'"
-              :disabled="!ready"
-              @click.prevent="
-                if (ready) {
-                  $dispatch('open-reject-modal', { id: {{ $row->id }} });
-                }
-              ">
-              Reject
-            </button>
+            </div>
           </td>
           {{-- === /AKSI === --}}
         </tr>
