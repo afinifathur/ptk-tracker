@@ -18,24 +18,27 @@ class PTKController extends Controller
     private const PER_PAGE     = 20;
     private const KANBAN_LIMIT = 30;
 
-    // Tambahkan status baru agar konsisten dengan flow antrian
-    private const STATUSES     = ['Not Started', 'In Progress', 'Submitted', 'Waiting Director', 'Completed'];
+    private const STATUSES     = [
+        PTK::STATUS_NOT_STARTED,
+        PTK::STATUS_IN_PROGRESS,
+        PTK::STATUS_SUBMITTED,
+        PTK::STATUS_WAITING_DIRECTOR,
+        PTK::STATUS_COMPLETED,
+    ];
 
     public function __construct(private readonly AttachmentService $attachments)
     {
         $this->authorizeResource(PTK::class, 'ptk');
     }
 
-    # =========================================================
-    # INDEX — daftar PTK (pakai scope visibleTo) + role_filter
-    # =========================================================
+    // =========================================================
+    // INDEX
+    // =========================================================
     public function index(Request $request): View
     {
-        // Base query dengan eager load dan scope visibleTo (akses)
         $base = PTK::with(['department','category','subcategory','pic'])
             ->visibleTo($request->user());
 
-        // Free-text search (number OR title)
         if ($q = $request->query('q')) {
             $base->where(function ($qb) use ($q) {
                 $qb->where('number', 'like', "%{$q}%")
@@ -43,39 +46,29 @@ class PTKController extends Controller
             });
         }
 
-        // Filter status (opsional)
         if ($status = $request->query('status')) {
             $base->where('status', $status);
         }
 
-        // Filter berdasarkan role admin/divisi (role_filter)
         if ($role = $request->query('role_filter')) {
-            // Ambil user id untuk role tersebut (menggunakan spatie/permission -> User::role())
-            // Jika paket role tidak tersedia, ini bisa diganti sesuai implementasimu.
             $userIds = User::role($role)->pluck('id')->toArray();
-
-            // Jika tidak ada user dengan role tersebut, hasil akan kosong => tambahkan whereFalse
             if (empty($userIds)) {
-                // cara paling sederhana: paksa kondisi yang selalu salah
                 $base->whereRaw('0 = 1');
             } else {
                 $base->where(function ($qb) use ($userIds) {
-                    // PTK yang dibuat oleh user-role tersebut OR PIC yang ditetapkan ke user-role tersebut
                     $qb->whereIn('created_by', $userIds)
                        ->orWhereIn('pic_user_id', $userIds);
                 });
             }
         }
 
-        // order & paginate (jaga querystring supaya filter tetap ada ketika pindah halaman)
         $ptks = $base->latest('created_at')->paginate(self::PER_PAGE)->withQueryString();
-
         return view('ptk.index', compact('ptks'));
     }
 
-    # =========================================================
-    # CREATE / STORE
-    # =========================================================
+    // =========================================================
+    // CREATE / STORE
+    // =========================================================
     public function create(Request $request): View
     {
         return view('ptk.create', [
@@ -87,22 +80,18 @@ class PTKController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        // number wajib & unik; due_date wajib; title max 200
         $data = $request->validate($this->rulesForStore());
-
-        // kolom sistem
         $data['created_by'] = $request->user()->id;
 
-        // gunakan PIC dari form (tidak dioverride), konsisten dengan view
         $ptk = PTK::create(collect($data)->except('attachments')->toArray());
         $this->handleAttachments($request, $ptk->id);
 
         return redirect()->route('ptk.index')->with('ok', 'PTK tersimpan.');
     }
 
-    # =========================================================
-    # SHOW / EDIT / UPDATE
-    # =========================================================
+    // =========================================================
+    // SHOW / EDIT / UPDATE (🔒 HARD LOCK)
+    // =========================================================
     public function show(PTK $ptk): View
     {
         $this->authorize('view', $ptk);
@@ -121,6 +110,12 @@ class PTKController extends Controller
 
     public function edit(Request $request, PTK $ptk): View
     {
+        $this->authorize('update', $ptk);
+
+        if ($ptk->isLocked()) {
+            abort(403, 'PTK sudah dikunci dan tidak dapat diedit.');
+        }
+
         return view('ptk.edit', [
             'ptk'           => $ptk,
             'departments'   => Department::orderBy('name')->pluck('name', 'id'),
@@ -131,12 +126,17 @@ class PTKController extends Controller
 
     public function update(Request $request, PTK $ptk): RedirectResponse
     {
-        // number unik tetapi mengabaikan id PTK sendiri
+        $this->authorize('update', $ptk);
+
+        if ($ptk->isLocked()) {
+            abort(403, 'PTK sudah dikunci dan tidak dapat diubah.');
+        }
+
         $data = $request->validate($this->rulesForUpdate($ptk));
 
-        // Auto set In Progress ketika evaluation diisi dari Not Started
-        if ($request->filled('evaluation') && $ptk->status === 'Not Started') {
-            $data['status'] = 'In Progress';
+        // Auto naik status ke In Progress saat evaluasi diisi
+        if ($request->filled('evaluation') && $ptk->status === PTK::STATUS_NOT_STARTED) {
+            $data['status'] = PTK::STATUS_IN_PROGRESS;
         }
 
         $ptk->update(collect($data)->except('attachments')->toArray());
@@ -145,11 +145,17 @@ class PTKController extends Controller
         return back()->with('ok', 'Perubahan disimpan.');
     }
 
-    # =========================================================
-    # DESTROY (soft delete)
-    # =========================================================
+    // =========================================================
+    // DESTROY (🔒 HARD LOCK)
+    // =========================================================
     public function destroy(PTK $ptk): RedirectResponse
     {
+        $this->authorize('delete', $ptk);
+
+        if ($ptk->isLocked()) {
+            abort(403, 'PTK sudah dikunci dan tidak dapat dihapus.');
+        }
+
         try {
             $ptk->delete();
             return redirect()->route('ptk.index')->with('ok', 'PTK dipindahkan ke Recycle Bin.');
@@ -158,32 +164,68 @@ class PTKController extends Controller
         }
     }
 
-    # =========================================================
-    # KANBAN — pakai scope visibleTo
-    # =========================================================
+    // =========================================================
+    // KANBAN
+    // =========================================================
     public function kanban(): View
     {
         $base = PTK::with(['department','category','subcategory','pic'])
             ->visibleTo(auth()->user());
 
-        $notStarted = (clone $base)->where('status','Not Started')
+        $notStarted = (clone $base)->where('status', PTK::STATUS_NOT_STARTED)
             ->orderBy('created_at')->limit(self::KANBAN_LIMIT)->get();
 
-        $inProgress = (clone $base)->where('status','In Progress')
+        $inProgress = (clone $base)->where('status', PTK::STATUS_IN_PROGRESS)
             ->orderBy('created_at')->limit(self::KANBAN_LIMIT)->get();
 
-        $completed = (clone $base)->where('status','Completed')
+        $completed = (clone $base)->where('status', PTK::STATUS_COMPLETED)
             ->latest()->limit(self::KANBAN_LIMIT)->get();
 
         return view('ptk.kanban', compact('notStarted','inProgress','completed'));
     }
+// =========================================================
+// QUEUE — antrian approval
+// =========================================================
+public function queue(Request $request, ?string $stage = null): View
+{
+    $user  = auth()->user();
+    $stage = $stage ? strtolower($stage) : null;
 
-    # =========================================================
-    # QUICK STATUS (AJAX)
-    # =========================================================
+    $base = PTK::with(['department','pic'])->visibleTo($user);
+
+    if ($user->hasRole('director') || $stage === 'director') {
+        // Stage 2: menunggu Direktur
+        $items = (clone $base)
+            ->where('status', PTK::STATUS_WAITING_DIRECTOR)
+            ->whereNull('approved_stage2_at')
+            ->latest('updated_at')
+            ->get();
+
+        $stage = 'director';
+    } else {
+        // Stage 1: menunggu Kabag / Manager
+        $items = (clone $base)
+            ->where('status', PTK::STATUS_SUBMITTED)
+            ->whereNull('approved_stage1_at')
+            ->latest('updated_at')
+            ->get();
+
+        $stage = 'approver';
+    }
+
+    return view('ptk.queue', compact('items', 'stage'));
+}
+
+    // =========================================================
+    // QUICK STATUS (AJAX) — hormati LOCK
+    // =========================================================
     public function quickStatus(Request $request, PTK $ptk): JsonResponse
     {
         $this->authorize('update', $ptk);
+
+        if ($ptk->isLocked()) {
+            abort(403, 'PTK sudah dikunci.');
+        }
 
         $request->validate(['status' => ['required', Rule::in(self::STATUSES)]]);
         $ptk->update(['status' => $request->string('status')]);
@@ -191,42 +233,39 @@ class PTKController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    # =========================================================
-    # QUEUE — antrian approval (tanpa filter "no number")
-    #   - stage: null/all (default kabag/manager) | director
-    #   - jika user direktur, auto ke antrian direktur
-    # =========================================================
-    public function queue(Request $request, ?string $stage = null): View
+    // =========================================================
+    // SUBMIT (🔒 HARD GUARD)
+    // =========================================================
+    public function submit(PTK $ptk): RedirectResponse
     {
-        $user  = auth()->user();
-        $stage = $stage ? strtolower($stage) : null;
+        $this->authorize('update', $ptk);
 
-        $base = PTK::with(['department','pic'])->visibleTo($user);
-
-        if ($user->hasRole('director') || $stage === 'director') {
-            // Stage 2: menunggu Direktur
-            $items = (clone $base)
-                ->where('status', 'Waiting Director')
-                ->whereNull('approved_stage2_at')
-                ->latest('updated_at')
-                ->get();
-            $stage = 'director';
-        } else {
-            // Stage 1: menunggu Kabag/Manager
-            $items = (clone $base)
-                ->where('status', 'Submitted')
-                ->whereNull('approved_stage1_at')
-                ->latest('updated_at')
-                ->get();
-            $stage = 'approver';
+        if (!$ptk->canSubmit()) {
+            abort(403, 'PTK hanya bisa disubmit dari status In Progress.');
         }
 
-        return view('ptk.queue', compact('items', 'stage'));
+        if (empty($ptk->number)) {
+            return back()->with('ok', 'Isi Nomor PTK dulu sebelum Submit.');
+        }
+
+        $ptk->update([
+            'status'             => PTK::STATUS_SUBMITTED,
+            'approved_stage1_by' => null,
+            'approved_stage1_at' => null,
+            'approved_stage2_by' => null,
+            'approved_stage2_at' => null,
+            'last_reject_stage'  => null,
+            'last_reject_reason' => null,
+            'last_reject_by'     => null,
+            'last_reject_at'     => null,
+        ]);
+
+        return back()->with('ok', 'PTK dikirim ke antrian Kabag/Manager.');
     }
 
-    # =========================================================
-    # RECYCLE BIN (pakai scope visibleTo)
-    # =========================================================
+    // =========================================================
+    // RECYCLE / RESTORE / FORCE DELETE
+    // =========================================================
     public function recycle(Request $request): View
     {
         $items = PTK::onlyTrashed()
@@ -242,8 +281,12 @@ class PTKController extends Controller
     {
         $ptk = PTK::withTrashed()->findOrFail($id);
         $this->authorize('delete', $ptk);
-        $ptk->restore();
 
+        if ($ptk->isLocked()) {
+            abort(403, 'PTK sudah dikunci dan tidak dapat dipulihkan.');
+        }
+
+        $ptk->restore();
         return back()->with('ok', 'PTK dipulihkan.');
     }
 
@@ -251,6 +294,10 @@ class PTKController extends Controller
     {
         $ptk = PTK::withTrashed()->with('attachments')->findOrFail($id);
         $this->authorize('delete', $ptk);
+
+        if ($ptk->isLocked()) {
+            abort(403, 'PTK sudah dikunci dan tidak dapat dihapus permanen.');
+        }
 
         foreach ($ptk->attachments as $a) {
             if ($a->path) Storage::disk('public')->delete($a->path);
@@ -261,38 +308,9 @@ class PTKController extends Controller
         return back()->with('ok', 'PTK dihapus permanen.');
     }
 
-    # =========================================================
-    # SUBMIT — ubah status ke Submitted (bukan Completed)
-    #   - wajib sudah ada number (manual)
-    #   - reset approval & reject info lama
-    # =========================================================
-    public function submit(PTK $ptk): RedirectResponse
-    {
-        $this->authorize('update', $ptk);
-
-        // Wajib sudah ada number (sekarang manual)
-        if (empty($ptk->number)) {
-            return back()->with('ok', 'Isi Nomor PTK dulu sebelum Submit.');
-        }
-
-        $ptk->update([
-            'status'             => 'Submitted',
-            'approved_stage1_by' => null,
-            'approved_stage1_at' => null,
-            'approved_stage2_by' => null,
-            'approved_stage2_at' => null,
-            'last_reject_stage'  => null,
-            'last_reject_reason' => null,
-            'last_reject_by'     => null,
-            'last_reject_at'     => null,
-        ]);
-
-        return back()->with('ok', 'PTK dikirim ke antrian Kabag/Manager.');
-    }
-
-    # =========================================================
-    # IMPORT
-    # =========================================================
+    // =========================================================
+    // IMPORT
+    // =========================================================
     public function import(Request $request): RedirectResponse
     {
         $request->validate([
@@ -300,13 +318,12 @@ class PTKController extends Controller
         ]);
 
         Excel::import(new PTKImport, $request->file('file'));
-
         return back()->with('ok', 'Import selesai.');
     }
 
-    # =========================================================
-    # HELPERS
-    # =========================================================
+    // =========================================================
+    // HELPERS
+    // =========================================================
     private function picCandidatesFor(Request $request)
     {
         $builder = User::query()->orderBy('name')->select(['id','name']);
@@ -319,13 +336,6 @@ class PTKController extends Controller
         return $builder->get();
     }
 
-    /**
-     * Validasi untuk STORE (create)
-     * - number wajib & unik
-     * - due_date wajib
-     * - title max 200
-     * - pic_user_id wajib (selaras dengan form)
-     */
     private function rulesForStore(): array
     {
         return [
@@ -347,11 +357,6 @@ class PTKController extends Controller
         ];
     }
 
-    /**
-     * Validasi untuk UPDATE (edit)
-     * - number unik tapi mengabaikan id PTK sendiri
-     * - due_date wajib
-     */
     private function rulesForUpdate(PTK $ptk): array
     {
         return [

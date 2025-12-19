@@ -10,97 +10,123 @@ class PTKPolicy
 {
     /** Peran dengan hak penuh menghapus PTK apa pun. */
     private const SUPER_DELETE_ROLES   = ['director', 'auditor'];
-    /** Peran atasan (boleh hapus apa pun). */
+
+    /** Peran atasan (boleh hapus PTK non-locked). */
     private const MANAGER_DELETE_ROLES = ['kabag_qc', 'manager_hr'];
 
-    /**
-     * Lihat daftar PTK (list page di-filter oleh scope visibleTo di query, jadi always true).
-     */
+    // =========================================================
+    // VIEW
+    // =========================================================
+
     public function viewAny(User $user): bool
     {
         return true;
     }
 
-    /**
-     * Lihat detail/preview PTK.
-     * Konsisten: hanya boleh jika PTK masuk ke scope visibleTo(user).
-     */
     public function view(User $user, PTK $ptk): bool
     {
         return PTK::visibleTo($user)->whereKey($ptk->id)->exists();
     }
 
-    /**
-     * Export / Preview (PDF/berkas).
-     * Harus bisa "view" + punya izin aksi.
-     */
+    // =========================================================
+    // EXPORT / DOWNLOAD
+    // =========================================================
+
     public function export(User $user, PTK $ptk): bool
     {
         return $user->can('ptk.export') && $this->view($user, $ptk);
     }
 
-    /**
-     * Download mengikuti aturan export (konsisten).
-     */
     public function download(User $user, PTK $ptk): bool
     {
         return $this->export($user, $ptk);
     }
 
-    /**
-     * Membuat PTK.
-     */
+    // =========================================================
+    // CREATE
+    // =========================================================
+
     public function create(User $user): bool
     {
         return $user->can('ptk.create');
     }
 
-    /**
-     * Update PTK: butuh izin & harus bisa melihat itemnya.
-     */
+    // =========================================================
+    // UPDATE (🔒 DIKUNCI BERDASARKAN STATUS)
+    // =========================================================
+
     public function update(User $user, PTK $ptk): bool
     {
+        // Tidak boleh update jika PTK sudah LOCKED
+        if ($ptk->isLocked()) {
+            return false;
+        }
+
         return $user->can('ptk.update') && $this->view($user, $ptk);
     }
 
-    /**
-     * Hapus PTK (soft/permanent).
-     * - Director/Auditor/Kabag_QC/Manager_HR: selalu boleh.
-     * - Lainnya: butuh permission ptk.delete dan harus bisa melihat itemnya (visibleTo).
-     */
+    // =========================================================
+    // DELETE (🔒 DIKUNCI BERDASARKAN STATUS)
+    // =========================================================
+
     public function delete(User $user, PTK $ptk): bool
     {
-        if ($user->hasAnyRole(self::SUPER_DELETE_ROLES)
-            || $user->hasAnyRole(self::MANAGER_DELETE_ROLES)) {
+        // PTK LOCKED tidak boleh dihapus oleh siapa pun
+        if ($ptk->isLocked()) {
+            return false;
+        }
+
+        // Director & Auditor boleh hapus PTK non-locked
+        if ($user->hasAnyRole(self::SUPER_DELETE_ROLES)) {
+            return true;
+        }
+
+        // Kabag / Manager boleh hapus PTK non-locked
+        if ($user->hasAnyRole(self::MANAGER_DELETE_ROLES)) {
             return true;
         }
 
         return $user->can('ptk.delete') && $this->view($user, $ptk);
     }
 
+    // =========================================================
+    // APPROVAL
+    // =========================================================
+
     /**
      * Approve PTK:
-     * - Hanya director/kabag_qc/manager_hr
-     * - Hanya jika status 'Completed' & belum bernomor
+     * - Stage 1: kabag_qc / manager_hr
+     * - Stage 2: director
      */
     public function approve(User $user, PTK $ptk): bool
     {
-        if ($user->hasRole(['director', 'kabag_qc', 'manager_hr'])) {
-            return $ptk->status === 'Completed' && empty($ptk->number);
+        // Stage 1 approval
+        if ($ptk->awaitingStage1() && $user->hasAnyRole(['kabag_qc', 'manager_hr'])) {
+            return true;
         }
+
+        // Stage 2 approval
+        if ($ptk->awaitingStage2() && $user->hasRole('director')) {
+            return true;
+        }
+
         return false;
     }
 
     /**
      * Reject PTK:
-     * - Hanya director/kabag_qc/manager_hr
-     * - Hanya jika status 'Completed'
+     * - Stage 1 / 2 sesuai role
      */
     public function reject(User $user, PTK $ptk): bool
     {
-        if ($user->hasRole(['director', 'kabag_qc', 'manager_hr'])) {
-            return $ptk->status === 'Completed';
+        if ($ptk->awaitingStage1() && $user->hasAnyRole(['kabag_qc', 'manager_hr'])) {
+            return true;
         }
+
+        if ($ptk->awaitingStage2() && $user->hasRole('director')) {
+            return true;
+        }
+
         return false;
     }
 }

@@ -134,21 +134,5 @@
   {{-- Pagination --}}
   <div class="mt-4">{{ $ptks->links() }}</div>
 
-  {{-- DataTables init (pastikan jQuery & DataTables sudah dimuat di layout) --}}
-  <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      // jika DataTable sudah di-init sebelumnya, destroy dulu (hindari double-init)
-      if ($.fn.dataTable.isDataTable('#ptkTable')) {
-        $('#ptkTable').DataTable().destroy();
-      }
-
-      $('#ptkTable').DataTable({
-        pageLength: 10,
-        order: [[1, 'desc']],
-        responsive: true,
-        language: { search: "_INPUT_", searchPlaceholder: "Cari PTK..." },
-        columnDefs: [{ targets: -1, orderable: false }]
-      });
-    });
-  </script>
+ 
 </x-layouts.app>
