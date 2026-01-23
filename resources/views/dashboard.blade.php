@@ -143,149 +143,161 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 
 <script>
-document.addEventListener('DOMContentLoaded', function () {
+  document.addEventListener('DOMContentLoaded', function () {
 
-  const toNums = (arr) =>
-    Array.isArray(arr) ? arr.map(v => Number(v) || 0) : [];
-
-  /* =========================================================
-   * LINE CHART — TREN PTK
-   * ========================================================= */
-  (function drawTrend() {
-    const el = document.getElementById('trendChart');
-    if (!el) return;
-
-    const labels   = @json($labels ?? []);
-    const months   = @json($monthMarks ?? []);
-    const seriesQc = toNums(@json($seriesQc ?? []));
-    const seriesHr = toNums(@json($seriesHr ?? []));
-
-    new Chart(el, {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [
-          {
-            label: 'PTK QC (Kabag QC)',
-            data: seriesQc,
-            borderColor: '#3b82f6',
-            backgroundColor: '#3b82f6',
-            borderWidth: 2,
-            tension: 0.3,
-            pointRadius: 3,
-            fill: false
-          },
-          {
-            label: 'PTK HR (Manager HR)',
-            data: seriesHr,
-            borderColor: '#f97316',
-            backgroundColor: '#f97316',
-            borderWidth: 2,
-            tension: 0.3,
-            pointRadius: 3,
-            fill: false
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { display: true }
-        },
-        scales: {
-          x: {
-            title: {
-              display: true,
-              text: 'Minggu (26 minggu terakhir)'
-            },
-            ticks: {
-              callback: (v, i) => {
-                const w = labels[i] ?? v;
-                const m = months[i] ?? '';
-                return m ? [w, m] : w;
-              },
-              font: { size: 11 }
-            }
-          },
-          y: {
-            beginAtZero: true,
-            ticks: { stepSize: 1 }
-          }
-        }
+    // Helper safe convert to numbers
+    function toNums(arr) {
+      if (Array.isArray(arr)) {
+        return arr.map(function (v) { return Number(v) || 0; });
       }
-    });
-  })();
-
-  /* =========================================================
-   * DONUT CHART — DISTRIBUSI DEPARTEMEN
-   * ========================================================= */
-  (function drawDonut() {
-    const el = document.getElementById('deptDonut');
-    if (!el) return;
-
-    const labels = @json($deptLabels ?? []);
-    const series = toNums(@json($deptSeries ?? []));
-    const total  = series.reduce((a, b) => a + b, 0);
-
-    if (!labels.length || !series.length || total === 0) {
-      el.replaceWith(Object.assign(document.createElement('div'), {
-        className: 'text-sm text-gray-400',
-        innerText: 'Tidak ada data departemen pada periode ini.'
-      }));
-      return;
+      return [];
     }
 
-    const colors = [
-      '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
-      '#8b5cf6', '#06b6d4', '#f97316', '#22c55e',
-      '#eab308', '#ec4899', '#94a3b8'
-    ];
+    /* =========================================================
+     * LINE CHART — TREN PTK
+     * ========================================================= */
+    (function drawTrend() {
+      var el = document.getElementById('trendChart');
+      if (!el) return;
 
-    new Chart(el, {
-      type: 'doughnut',
-      data: {
-        labels,
-        datasets: [{
-          data: series,
-          backgroundColor: labels.map((_, i) => colors[i % colors.length]),
-          borderColor: '#ffffff',
-          borderWidth: 2,
-          hoverOffset: 10
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: '58%',
-        plugins: {
-          legend: {
-            display: false
-          },
-          tooltip: {
-            callbacks: {
-              label: (ctx) => {
-                const val = ctx.parsed || 0;
-                const pct = ((val / total) * 100).toFixed(1);
-                return `${ctx.label}: ${val} (${pct}%)`;
-              }
-            }
-          },
-          datalabels: {
-            color: '#ffffff',
-            font: {
-              weight: '700',
-              size: 13
+      var labels = @json($labels ?? []);
+      var months = @json($monthMarks ?? []);
+      var seriesQc = toNums(@json($seriesQc ?? []));
+      var seriesHr = toNums(@json($seriesHr ?? []));
+
+      new Chart(el, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'PTK QC (Kabag QC)',
+              data: seriesQc,
+              borderColor: '#3b82f6',
+              backgroundColor: '#3b82f6',
+              borderWidth: 2,
+              tension: 0.3,
+              pointRadius: 3,
+              fill: false
             },
-            formatter: (value) => {
-              const pct = Math.round((value / total) * 100);
-              return pct >= 3 ? pct + '%' : '';
+            {
+              label: 'PTK HR (Manager HR)',
+              data: seriesHr,
+              borderColor: '#f97316',
+              backgroundColor: '#f97316',
+              borderWidth: 2,
+              tension: 0.3,
+              pointRadius: 3,
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: true }
+          },
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: 'Minggu (26 minggu terakhir)'
+              },
+              ticks: {
+                callback: function (v, i) {
+                  var w = labels[i] || v;
+                  var m = months[i] || '';
+                  return m ? [w, m] : w;
+                },
+                font: { size: 11 }
+              }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: { stepSize: 1 }
             }
           }
         }
-      },
-      plugins: [ChartDataLabels]
-    });
-  })();
+      });
+    })();
 
-});
+    /* =========================================================
+     * DONUT CHART — DISTRIBUSI DEPARTEMEN
+     * ========================================================= */
+    (function drawDonut() {
+      var el = document.getElementById('deptDonut');
+      if (!el) return;
+
+      var labels = @json($deptLabels ?? []);
+      var series = toNums(@json($deptSeries ?? []));
+
+      // Sum total safely
+      var total = 0;
+      for (var k = 0; k < series.length; k++) {
+        total += series[k];
+      }
+
+      if (!labels.length || !series.length || total === 0) {
+        var div = document.createElement('div');
+        div.className = 'text-sm text-gray-400';
+        div.innerText = 'Tidak ada data departemen pada periode ini.';
+        el.parentNode.replaceChild(div, el);
+        return;
+      }
+
+      var colors = [
+        '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
+        '#8b5cf6', '#06b6d4', '#f97316', '#22c55e',
+        '#eab308', '#ec4899', '#94a3b8'
+      ];
+
+      new Chart(el, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: series,
+            backgroundColor: labels.map(function (_, i) {
+              return colors[i % colors.length];
+            }),
+            borderColor: '#ffffff',
+            borderWidth: 2,
+            hoverOffset: 10
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '58%',
+          plugins: {
+            legend: {
+              display: false
+            },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) {
+                  var val = ctx.parsed || 0;
+                  var pct = ((val / total) * 100).toFixed(1);
+                  return ctx.label + ': ' + val + ' (' + pct + '%)';
+                }
+              }
+            },
+            datalabels: {
+              color: '#ffffff',
+              font: {
+                weight: '700',
+                size: 13
+              },
+              formatter: function (value) {
+                var pct = Math.round((value / total) * 100);
+                return pct >= 3 ? pct + '%' : '';
+              }
+            }
+          }
+        },
+        plugins: [ChartDataLabels]
+      });
+    })();
+
+  });
 </script>
