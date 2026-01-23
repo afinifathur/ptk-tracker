@@ -167,8 +167,8 @@
   <script src="{{ asset('vendor/datatables/jquery.dataTables.min.js') }}"></script>
   <script src="{{ asset('vendor/datatables/dataTables.bootstrap5.min.js') }}"></script>
 
-  <script src="{{ asset('vendor/chartjs/chart.umd.min.js') }}"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+  <script src="{{ asset('js/lib/chart.umd.min.js') }}"></script>
+  <script src="{{ asset('js/lib/chartjs-plugin-datalabels.min.js') }}"></script>
   <script src="{{ asset('vendor/sortable/Sortable.min.js') }}"></script>
   <script src="{{ asset('vendor/alpine/alpine.min.js') }}" defer></script>
 
