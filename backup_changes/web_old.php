@@ -2,19 +2,17 @@
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
-
 use App\Http\Controllers\{
     DashboardController,
     PTKController,
     ApprovalController,
     ExportController,
     AuditController,
-    PTKAttachmentController,
-    ApprovalLogController
+    PTKAttachmentController
 };
-
 use App\Http\Controllers\Settings\CategorySettingsController;
 use App\Models\{PTK, Attachment};
+use App\Http\Controllers\VerifyController;
 
 /*
 |--------------------------------------------------------------------------
@@ -22,7 +20,7 @@ use App\Models\{PTK, Attachment};
 |--------------------------------------------------------------------------
 */
 
-Route::get('/', fn () => redirect()->route('dashboard'));
+Route::get('/', fn() => redirect()->route('dashboard'));
 
 Route::middleware('auth')->group(function () {
 
@@ -31,8 +29,7 @@ Route::middleware('auth')->group(function () {
     | Dashboard
     |--------------------------------------------------------------------------
     */
-    Route::get('/dashboard', [DashboardController::class, 'index'])
-        ->name('dashboard');
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
 
     /*
@@ -42,27 +39,25 @@ Route::middleware('auth')->group(function () {
     */
     Route::resource('ptk', PTKController::class);
 
-    Route::get('ptk-kanban', [PTKController::class, 'kanban'])
-        ->name('ptk.kanban');
+    // Kanban + update status cepat
+    Route::get('ptk-kanban', [PTKController::class, 'kanban'])->name('ptk.kanban');
+    Route::post('ptk/{ptk}/status', [PTKController::class, 'quickStatus'])->name('ptk.status');
 
-    Route::post('ptk/{ptk}/status', [PTKController::class, 'quickStatus'])
-        ->name('ptk.status');
-
+    // Antrian approval
     Route::get('ptk-queue/{stage?}', [PTKController::class, 'queue'])
         ->whereIn('stage', ['approver', 'director'])
         ->name('ptk.queue')
         ->middleware('permission:menu.queue');
 
+    // Recycle bin
     Route::get('ptk-recycle', [PTKController::class, 'recycle'])
         ->name('ptk.recycle')
         ->middleware('permission:menu.recycle');
 
-    Route::post('ptk/{id}/restore', [PTKController::class, 'restore'])
-        ->name('ptk.restore');
+    Route::post('ptk/{id}/restore', [PTKController::class, 'restore'])->name('ptk.restore');
+    Route::delete('ptk/{id}/force', [PTKController::class, 'forceDelete'])->name('ptk.force');
 
-    Route::delete('ptk/{id}/force', [PTKController::class, 'forceDelete'])
-        ->name('ptk.force');
-
+    // Import PTK
     Route::post('ptk-import', [PTKController::class, 'import'])
         ->name('ptk.import')
         ->middleware('throttle:uploads');
@@ -87,15 +82,6 @@ Route::middleware('auth')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Approval Log (Route Baru)
-    |--------------------------------------------------------------------------
-    */
-    Route::get('/approval-log', [ApprovalLogController::class, 'index'])
-        ->name('approval.log');
-
-
-    /*
-    |--------------------------------------------------------------------------
     | Settings: Kategori & Subkategori
     |--------------------------------------------------------------------------
     */
@@ -104,11 +90,13 @@ Route::middleware('auth')->group(function () {
         ->controller(CategorySettingsController::class)
         ->group(function () {
 
+            // Kategori
             Route::get('categories', 'index')->name('categories');
             Route::post('categories', 'storeCategory')->name('categories.store');
             Route::patch('categories/{category}', 'updateCategory')->name('categories.update');
             Route::delete('categories/{category}', 'deleteCategory')->name('categories.delete');
 
+            // Subkategori
             Route::post('subcategories', 'storeSubcategory')->name('subcategories.store');
             Route::patch('subcategories/{subcategory}', 'updateSubcategory')->name('subcategories.update');
             Route::delete('subcategories/{subcategory}', 'deleteSubcategory')->name('subcategories.delete');
@@ -126,13 +114,17 @@ Route::middleware('auth')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Export
+    | Export (Preview, PDF, Range Report)
     |--------------------------------------------------------------------------
     */
+
+    // existing preview (route-model binding)
     Route::get('exports/preview/{ptk}', [ExportController::class, 'preview'])
         ->name('exports.preview');
 
-    Route::get('exports/ptk/{id}/preview', [ExportController::class, 'previewPdf'])
+    // menampilkan PDF inline di tab baru (preview)
+    // route baru sesuai permintaan: /exports/ptk/{id}/preview
+    Route::get('/exports/ptk/{id}/preview', [ExportController::class, 'previewPdf'])
         ->name('exports.pdf.preview');
 
     Route::get('exports/pdf/{ptk}', [ExportController::class, 'pdf'])
@@ -140,37 +132,36 @@ Route::middleware('auth')->group(function () {
 
     Route::prefix('exports')->name('exports.')->group(function () {
 
-        Route::get('range', [ExportController::class, 'rangeForm'])
-            ->name('range.form');
+        // Range laporan
+        Route::get('range', [ExportController::class, 'rangeForm'])->name('range.form');
+        Route::post('range', [ExportController::class, 'rangeReport'])->name('range.report');
 
-        Route::post('range', [ExportController::class, 'rangeReport'])
-            ->name('range.report');
+        // Export Excel & PDF
+        Route::get('excel', [ExportController::class, 'excel'])->name('excel');
+        Route::post('range/excel', [ExportController::class, 'rangeExcel'])->name('range.excel');
+        Route::post('range/pdf', [ExportController::class, 'rangePdf'])->name('range.pdf');
 
-        Route::get('excel', [ExportController::class, 'excel'])
-            ->name('excel');
-
-        Route::post('range/excel', [ExportController::class, 'rangeExcel'])
-            ->name('range.excel');
-
-        Route::post('range/pdf', [ExportController::class, 'rangePdf'])
-            ->name('range.pdf');
-
+        // Audit Log (General)
         Route::get('audits', [AuditController::class, 'index'])
             ->name('audits.index')
             ->middleware('permission:menu.audit');
+
+        // Approval Log (Admin View of Rejections/Approvals)
+        Route::get('approval-log', [AuditController::class, 'approvalLog'])
+            ->name('approval_log');
     });
 
 
     /*
     |--------------------------------------------------------------------------
-    | Attachment
+    | Caption Attachment (Inline Update)
     |--------------------------------------------------------------------------
     */
-    Route::patch('attachments/{attachment}/caption', function (Request $request, Attachment $attachment) {
+    Route::patch('attachments/{attachment}/caption', function (Request $r, Attachment $attachment) {
 
         abort_unless(auth()->user()->can('update', $attachment->ptk), 403);
 
-        $data = $request->validate([
+        $data = $r->validate([
             'caption' => 'nullable|string|max:255'
         ]);
 
@@ -179,7 +170,13 @@ Route::middleware('auth')->group(function () {
         return back()->with('ok', 'Caption tersimpan.');
     })->name('attachments.caption');
 
-    Route::delete('ptk-attachment/{id}', [PTKAttachmentController::class, 'destroy'])
+
+    /*
+    |--------------------------------------------------------------------------
+    | Hapus Lampiran PTK (Route Baru)
+    |--------------------------------------------------------------------------
+    */
+    Route::delete('/ptk-attachment/{id}', [PTKAttachmentController::class, 'destroy'])
         ->name('ptk.attachment.delete');
 
 });
@@ -192,22 +189,4 @@ require __DIR__ . '/auth.php';
 | Verifikasi Dokumen (Publik)
 |--------------------------------------------------------------------------
 */
-Route::get('/verify/{ptk}/{hash}', function (PTK $ptk, string $hash) {
-
-    $expected = hash('sha256', json_encode([
-        'id'          => $ptk->id,
-        'number'      => $ptk->number,
-        'status'      => $ptk->status,
-        'due'         => $ptk->due_date?->format('Y-m-d'),
-        'approved_at' => $ptk->approved_at?->format('c'),
-        'updated_at'  => $ptk->updated_at?->format('c'),
-    ]));
-
-    return view('verify.result', [
-        'ptk'      => $ptk,
-        'valid'    => hash_equals($expected, $hash),
-        'expected' => $expected,
-        'hash'     => $hash,
-    ]);
-
-})->name('verify.show');
+Route::get('/verify/{ptk}/{hash}', [VerifyController::class, 'show'])->name('verify.show');

@@ -16,12 +16,12 @@ class AttachmentService
         $path = $file->store("ptk/{$ptkId}", 'public');
 
         return Attachment::create([
-            'ptk_id'        => $ptkId,
+            'ptk_id' => $ptkId,
             'original_name' => $file->getClientOriginalName(),
-            'path'          => $path,
-            'mime'          => $file->getClientMimeType(),
-            'size'          => $file->getSize(),
-            'uploaded_by'   => auth()->id(),
+            'path' => $path,
+            'mime' => $file->getMimeType(),
+            'size' => $file->getSize(),
+            'uploaded_by' => auth()->id(),
         ]);
     }
 }

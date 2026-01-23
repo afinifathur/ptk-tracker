@@ -15,11 +15,11 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class PTKController extends Controller
 {
-    private const PER_PAGE     = 20;
+    private const PER_PAGE = 20;
     private const KANBAN_LIMIT = 30;
 
     // Tambahkan status baru agar konsisten dengan flow antrian
-    private const STATUSES     = ['Not Started', 'In Progress', 'Submitted', 'Waiting Director', 'Completed'];
+    private const STATUSES = ['Not Started', 'In Progress', 'Submitted', 'Waiting Director', 'Completed'];
 
     public function __construct(private readonly AttachmentService $attachments)
     {
@@ -32,14 +32,14 @@ class PTKController extends Controller
     public function index(Request $request): View
     {
         // Base query dengan eager load dan scope visibleTo (akses)
-        $base = PTK::with(['department','category','subcategory','pic'])
+        $base = PTK::with(['department', 'category', 'subcategory', 'pic'])
             ->visibleTo($request->user());
 
         // Free-text search (number OR title)
         if ($q = $request->query('q')) {
             $base->where(function ($qb) use ($q) {
                 $qb->where('number', 'like', "%{$q}%")
-                   ->orWhere('title', 'like', "%{$q}%");
+                    ->orWhere('title', 'like', "%{$q}%");
             });
         }
 
@@ -50,20 +50,18 @@ class PTKController extends Controller
 
         // Filter berdasarkan role admin/divisi (role_filter)
         if ($role = $request->query('role_filter')) {
-            // Ambil user id untuk role tersebut (menggunakan spatie/permission -> User::role())
-            // Jika paket role tidak tersedia, ini bisa diganti sesuai implementasimu.
-            $userIds = User::role($role)->pluck('id')->toArray();
+            if (is_string($role)) {
+                // Ambil user id untuk role tersebut
+                $userIds = User::role($role)->pluck('id')->toArray();
 
-            // Jika tidak ada user dengan role tersebut, hasil akan kosong => tambahkan whereFalse
-            if (empty($userIds)) {
-                // cara paling sederhana: paksa kondisi yang selalu salah
-                $base->whereRaw('0 = 1');
-            } else {
-                $base->where(function ($qb) use ($userIds) {
-                    // PTK yang dibuat oleh user-role tersebut OR PIC yang ditetapkan ke user-role tersebut
-                    $qb->whereIn('created_by', $userIds)
-                       ->orWhereIn('pic_user_id', $userIds);
-                });
+                if (empty($userIds)) {
+                    $base->whereRaw('0 = 1');
+                } else {
+                    $base->where(function ($qb) use ($userIds) {
+                        $qb->whereIn('created_by', $userIds)
+                            ->orWhereIn('pic_user_id', $userIds);
+                    });
+                }
             }
         }
 
@@ -79,8 +77,8 @@ class PTKController extends Controller
     public function create(Request $request): View
     {
         return view('ptk.create', [
-            'departments'   => Department::orderBy('name')->pluck('name', 'id'),
-            'categories'    => Category::all(),
+            'departments' => Department::orderBy('name')->pluck('name', 'id'),
+            'categories' => Category::all(),
             'picCandidates' => $this->picCandidatesFor($request),
         ]);
     }
@@ -122,9 +120,9 @@ class PTKController extends Controller
     public function edit(Request $request, PTK $ptk): View
     {
         return view('ptk.edit', [
-            'ptk'           => $ptk,
-            'departments'   => Department::orderBy('name')->pluck('name', 'id'),
-            'categories'    => Category::all(),
+            'ptk' => $ptk,
+            'departments' => Department::orderBy('name')->pluck('name', 'id'),
+            'categories' => Category::all(),
             'picCandidates' => $this->picCandidatesFor($request),
         ]);
     }
@@ -163,19 +161,19 @@ class PTKController extends Controller
     # =========================================================
     public function kanban(): View
     {
-        $base = PTK::with(['department','category','subcategory','pic'])
+        $base = PTK::with(['department', 'category', 'subcategory', 'pic'])
             ->visibleTo(auth()->user());
 
-        $notStarted = (clone $base)->where('status','Not Started')
+        $notStarted = (clone $base)->where('status', 'Not Started')
             ->orderBy('created_at')->limit(self::KANBAN_LIMIT)->get();
 
-        $inProgress = (clone $base)->where('status','In Progress')
+        $inProgress = (clone $base)->where('status', 'In Progress')
             ->orderBy('created_at')->limit(self::KANBAN_LIMIT)->get();
 
-        $completed = (clone $base)->where('status','Completed')
+        $completed = (clone $base)->where('status', 'Completed')
             ->latest()->limit(self::KANBAN_LIMIT)->get();
 
-        return view('ptk.kanban', compact('notStarted','inProgress','completed'));
+        return view('ptk.kanban', compact('notStarted', 'inProgress', 'completed'));
     }
 
     # =========================================================
@@ -198,10 +196,10 @@ class PTKController extends Controller
     # =========================================================
     public function queue(Request $request, ?string $stage = null): View
     {
-        $user  = auth()->user();
+        $user = auth()->user();
         $stage = $stage ? strtolower($stage) : null;
 
-        $base = PTK::with(['department','pic'])->visibleTo($user);
+        $base = PTK::with(['department', 'pic'])->visibleTo($user);
 
         if ($user->hasRole('director') || $stage === 'director') {
             // Stage 2: menunggu Direktur
@@ -231,7 +229,7 @@ class PTKController extends Controller
     {
         $items = PTK::onlyTrashed()
             ->visibleTo(auth()->user())
-            ->with(['department:id,name','category:id,name','subcategory:id,name','pic:id,name'])
+            ->with(['department:id,name', 'category:id,name', 'subcategory:id,name', 'pic:id,name'])
             ->latest('deleted_at')
             ->paginate(self::PER_PAGE);
 
@@ -253,7 +251,8 @@ class PTKController extends Controller
         $this->authorize('delete', $ptk);
 
         foreach ($ptk->attachments as $a) {
-            if ($a->path) Storage::disk('public')->delete($a->path);
+            if ($a->path)
+                Storage::disk('public')->delete($a->path);
             $a->delete();
         }
 
@@ -276,15 +275,15 @@ class PTKController extends Controller
         }
 
         $ptk->update([
-            'status'             => 'Submitted',
+            'status' => 'Submitted',
             'approved_stage1_by' => null,
             'approved_stage1_at' => null,
             'approved_stage2_by' => null,
             'approved_stage2_at' => null,
-            'last_reject_stage'  => null,
+            'last_reject_stage' => null,
             'last_reject_reason' => null,
-            'last_reject_by'     => null,
-            'last_reject_at'     => null,
+            'last_reject_by' => null,
+            'last_reject_at' => null,
         ]);
 
         return back()->with('ok', 'PTK dikirim ke antrian Kabag/Manager.');
@@ -296,7 +295,7 @@ class PTKController extends Controller
     public function import(Request $request): RedirectResponse
     {
         $request->validate([
-            'file' => ['required','file','mimes:xlsx,csv,txt','max:10240'],
+            'file' => ['required', 'file', 'mimes:xlsx,csv,txt', 'max:10240'],
         ]);
 
         Excel::import(new PTKImport, $request->file('file'));
@@ -309,7 +308,7 @@ class PTKController extends Controller
     # =========================================================
     private function picCandidatesFor(Request $request)
     {
-        $builder = User::query()->orderBy('name')->select(['id','name']);
+        $builder = User::query()->orderBy('name')->select(['id', 'name']);
         $allowedDeptIds = DeptScope::allowedDeptIds($request->user());
 
         if (!empty($allowedDeptIds)) {
@@ -329,21 +328,21 @@ class PTKController extends Controller
     private function rulesForStore(): array
     {
         return [
-            'number'             => ['required','string','max:50','unique:ptks,number'],
-            'title'              => ['required','string','max:200'],
-            'description'        => ['nullable','string'],
-            'desc_nc'            => ['nullable','string'],
-            'evaluation'         => ['nullable','string'],
-            'action_correction'  => ['nullable','string'],
-            'action_corrective'  => ['nullable','string'],
-            'category_id'        => ['required','exists:categories,id'],
-            'subcategory_id'     => ['nullable','exists:subcategories,id'],
-            'department_id'      => ['required','exists:departments,id'],
-            'pic_user_id'        => ['required','exists:users,id'],
-            'due_date'           => ['required','date'],
-            'form_date'          => ['required','date'],
-            'status'             => ['nullable', Rule::in(self::STATUSES)],
-            'attachments.*'      => ['file','mimes:jpg,jpeg,png,pdf','max:5120'],
+            'number' => ['required', 'string', 'max:50', 'unique:ptks,number'],
+            'title' => ['required', 'string', 'max:200'],
+            'description' => ['nullable', 'string'],
+            'desc_nc' => ['nullable', 'string'],
+            'evaluation' => ['nullable', 'string'],
+            'action_correction' => ['nullable', 'string'],
+            'action_corrective' => ['nullable', 'string'],
+            'category_id' => ['required', 'exists:categories,id'],
+            'subcategory_id' => ['nullable', 'exists:subcategories,id'],
+            'department_id' => ['required', 'exists:departments,id'],
+            'pic_user_id' => ['required', 'exists:users,id'],
+            'due_date' => ['required', 'date'],
+            'form_date' => ['required', 'date'],
+            'status' => ['nullable', Rule::in(self::STATUSES)],
+            'attachments.*' => ['file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
         ];
     }
 
@@ -355,24 +354,26 @@ class PTKController extends Controller
     private function rulesForUpdate(PTK $ptk): array
     {
         return [
-            'number'             => [
-                'required','string','max:50',
-                Rule::unique('ptks','number')->ignore($ptk->id),
+            'number' => [
+                'required',
+                'string',
+                'max:50',
+                Rule::unique('ptks', 'number')->ignore($ptk->id),
             ],
-            'title'              => ['required','string','max:200'],
-            'description'        => ['nullable','string'],
-            'desc_nc'            => ['nullable','string'],
-            'evaluation'         => ['nullable','string'],
-            'action_correction'  => ['nullable','string'],
-            'action_corrective'  => ['nullable','string'],
-            'category_id'        => ['required','exists:categories,id'],
-            'subcategory_id'     => ['nullable','exists:subcategories,id'],
-            'department_id'      => ['required','exists:departments,id'],
-            'pic_user_id'        => ['required','exists:users,id'],
-            'due_date'           => ['required','date'],
-            'form_date'          => ['required','date'],
-            'status'             => ['nullable', Rule::in(self::STATUSES)],
-            'attachments.*'      => ['file','mimes:jpg,jpeg,png,pdf','max:5120'],
+            'title' => ['required', 'string', 'max:200'],
+            'description' => ['nullable', 'string'],
+            'desc_nc' => ['nullable', 'string'],
+            'evaluation' => ['nullable', 'string'],
+            'action_correction' => ['nullable', 'string'],
+            'action_corrective' => ['nullable', 'string'],
+            'category_id' => ['required', 'exists:categories,id'],
+            'subcategory_id' => ['nullable', 'exists:subcategories,id'],
+            'department_id' => ['required', 'exists:departments,id'],
+            'pic_user_id' => ['required', 'exists:users,id'],
+            'due_date' => ['required', 'date'],
+            'form_date' => ['required', 'date'],
+            'status' => ['nullable', Rule::in(self::STATUSES)],
+            'attachments.*' => ['file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
         ];
     }
 

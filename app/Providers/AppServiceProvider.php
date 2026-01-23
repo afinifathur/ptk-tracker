@@ -21,16 +21,35 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-       
-       View::composer('*', function ($view) {
-        try {
-            $count = PTK::where('status', '!=', 'Completed')
-                ->whereNull('approver_id')
-                ->count();
-        } catch (\Throwable $e) {
-            $count = 0;
-        }
-        $view->with('queueCount', $count);
-    }); 
+        // Share badge count only to navigation views
+        View::composer(['layouts.navigation', 'components.layouts.app', 'layouts.app'], function ($view) {
+            $approvalQueueCount = 0;
+
+            if (auth()->check() && auth()->user()->can('menu.queue')) {
+                try {
+                    $user = auth()->user();
+
+                    // Gunakan logika yang sama dengan PTKController::queue
+                    $base = PTK::visibleTo($user);
+
+                    if ($user->hasRole('director')) {
+                        // Stage 2: Waiting Director
+                        $approvalQueueCount = $base->where('status', 'Waiting Director')
+                            ->whereNull('approved_stage2_at')
+                            ->count();
+                    } else {
+                        // Stage 1: Submitted (Kabag/Manager)
+                        $approvalQueueCount = $base->where('status', 'Submitted')
+                            ->whereNull('approved_stage1_at')
+                            ->count();
+                    }
+                } catch (\Throwable $e) {
+                    // Fail silent (e.g. migration not ready)
+                    $approvalQueueCount = 0;
+                }
+            }
+
+            $view->with('approvalQueueCount', $approvalQueueCount);
+        });
     }
 }
