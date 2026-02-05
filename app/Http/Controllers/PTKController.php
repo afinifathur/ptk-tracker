@@ -100,6 +100,11 @@ class PTKController extends Controller
         $ptkData = collect($data)->except(['attachments', 'mtc', 'spareparts'])->toArray();
         $ptkData['created_by'] = $user->id;
 
+        // Set default description for MTC (they don't have description field)
+        if ($isMtc && empty($ptkData['description'])) {
+            $ptkData['description'] = '';
+        }
+
         $ptk = PTK::create($ptkData);
         $this->handleAttachments($request, $ptk->id);
 
