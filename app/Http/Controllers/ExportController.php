@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use App\Models\{PTK, Department, Category, Subcategory};
+use App\Models\{PTK, Department, Category, Subcategory, User};
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -48,8 +48,16 @@ class ExportController extends Controller
             $q->where('category_id', $r->category_id);
         if ($r->filled('subcategory_id'))
             $q->where('subcategory_id', $r->subcategory_id);
-        if ($r->filled('department_id'))
+
+        // Filter by Role Admin (pengganti department_id)
+        if ($r->filled('role_filter')) {
+            $userIds = User::whereHas('roles', fn($q) => $q->where('name', $r->role_filter))->pluck('id');
+            $q->whereIn('created_by', $userIds);
+        }
+        // Fallback backward compatibility (jika masih kirim department_id)
+        elseif ($r->filled('department_id')) {
             $q->where('department_id', $r->department_id);
+        }
 
         // Status (termasuk Overdue) — pakai due_date/status
         if ($r->filled('status')) {
@@ -66,12 +74,27 @@ class ExportController extends Controller
 
     private function rangeMeta(Request $r): array
     {
+        // Pretty name for role
+        $roleLabel = 'Semua';
+        if ($r->filled('role_filter')) {
+            $roleLabel = match ($r->role_filter) {
+                'admin_qc_fitting' => 'Admin QC Fitting',
+                'admin_qc_flange' => 'Admin QC Flange',
+                'admin_hr' => 'Admin HR',
+                'admin_k3' => 'Admin K3',
+                'admin_mtc' => 'Admin MTC',
+                default => $r->role_filter
+            };
+        } elseif ($r->filled('department_id')) {
+            $roleLabel = optional(Department::find($r->department_id))->name ?: 'Semua';
+        }
+
         return [
             'start' => $r->input('start'),
             'end' => $r->input('end'),
             'category_name' => optional(Category::find($r->category_id))->name ?: 'Semua',
             'subcategory_name' => optional(Subcategory::find($r->subcategory_id))->name ?: 'Semua',
-            'department_name' => optional(Department::find($r->department_id))->name ?: 'Semua',
+            'department_name' => $roleLabel, // Reuse key for display compatibility
             'status_label' => $r->status ?: 'Semua',
         ];
     }
@@ -83,7 +106,8 @@ class ExportController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        return Excel::download(new class ($items) implements
+        return Excel::download(
+            new class ($items) implements
             \Maatwebsite\Excel\Concerns\FromArray,
             \Maatwebsite\Excel\Concerns\WithHeadings,
             \Maatwebsite\Excel\Concerns\WithTitle {
@@ -115,7 +139,9 @@ class ExportController extends Controller
             {
                 return 'PTK';
             }
-        }, 'ptk.xlsx');
+            },
+            'ptk.xlsx'
+        );
     }
 
     public function __construct(private readonly \App\Services\PdfImageService $pdfImageService)
@@ -289,7 +315,8 @@ class ExportController extends Controller
             ->get();
         $meta = $this->rangeMeta($r);
 
-        return Excel::download(new class ($items, $meta) implements
+        return Excel::download(
+            new class ($items, $meta) implements
             \Maatwebsite\Excel\Concerns\FromArray,
             \Maatwebsite\Excel\Concerns\WithHeadings,
             \Maatwebsite\Excel\Concerns\WithTitle {
@@ -321,7 +348,9 @@ class ExportController extends Controller
             {
                 return 'PTK';
             }
-        }, 'PTK-Range-' . ($meta['start'] ?: 'all') . '-' . ($meta['end'] ?: 'all') . '.xlsx');
+            },
+            'PTK-Range-' . ($meta['start'] ?: 'all') . '-' . ($meta['end'] ?: 'all') . '.xlsx'
+        );
     }
 
     /** Helper: baca file & kembalikan base64 */

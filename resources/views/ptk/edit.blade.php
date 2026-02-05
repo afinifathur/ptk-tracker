@@ -4,12 +4,8 @@
     Edit PTK {{ $ptk->number ?? '—' }}
   </h2>
 
-  <form
-    method="POST"
-    enctype="multipart/form-data"
-    action="{{ route('ptk.update', $ptk) }}"
-    class="grid grid-cols-1 md:grid-cols-2 gap-4"
-  >
+  <form method="POST" enctype="multipart/form-data" action="{{ route('ptk.update', $ptk) }}"
+    class="grid grid-cols-1 md:grid-cols-2 gap-4">
     @csrf
     @method('PUT')
 
@@ -18,15 +14,8 @@
       <label for="number" class="block text-sm font-medium">
         Nomor PTK <span class="text-red-500">*</span>
       </label>
-      <input
-        id="number"
-        type="text"
-        name="number"
-        value="{{ old('number', $ptk->number) }}"
-        class="w-full border rounded px-3 py-2"
-        required
-        placeholder="contoh: PTK/QC/2025/10/001"
-      >
+      <input id="number" type="text" name="number" value="{{ old('number', $ptk->number) }}"
+        class="w-full border rounded px-3 py-2" required placeholder="contoh: PTK/QC/2025/10/001">
       <p class="text-xs text-gray-500 mt-1">
         Nomor wajib unik. Jika perlu koreksi format, ubah di sini.
       </p>
@@ -40,15 +29,8 @@
       <label for="title" class="block text-sm font-medium mb-1">
         Judul
       </label>
-      <input
-        id="title"
-        type="text"
-        name="title"
-        class="border p-2 rounded w-full"
-        required
-        maxlength="200"
-        value="{{ old('title', $ptk->title) }}"
-      >
+      <input id="title" type="text" name="title" class="border p-2 rounded w-full" required maxlength="200"
+        value="{{ old('title', $ptk->title) }}">
       @error('title')
         <small class="text-red-600">{{ $message }}</small>
       @enderror
@@ -59,12 +41,8 @@
       <label for="status" class="block text-sm font-medium mb-1">
         Status
       </label>
-      <select
-        id="status"
-        name="status"
-        class="border p-2 rounded w-full"
-      >
-        @foreach(['Not Started','In Progress','Completed'] as $s)
+      <select id="status" name="status" class="border p-2 rounded w-full">
+        @foreach(['Not Started', 'In Progress', 'Completed'] as $s)
           <option value="{{ $s }}" @selected(old('status', $ptk->status) === $s)>
             {{ $s }}
           </option>
@@ -80,12 +58,7 @@
       <label for="cat" class="block text-sm font-medium mb-1">
         Kategori
       </label>
-      <select
-        name="category_id"
-        id="cat"
-        class="border p-2 rounded w-full"
-        required
-      >
+      <select name="category_id" id="cat" class="border p-2 rounded w-full" required>
         @foreach($categories as $c)
           <option value="{{ $c->id }}" @selected(old('category_id', $ptk->category_id) == $c->id)>
             {{ $c->name }}
@@ -102,11 +75,7 @@
       <label for="subcat" class="block text-sm font-medium mb-1">
         Subkategori
       </label>
-      <select
-        name="subcategory_id"
-        id="subcat"
-        class="border p-2 rounded w-full"
-      >
+      <select name="subcategory_id" id="subcat" class="border p-2 rounded w-full">
         <option value="">-- pilih subkategori --</option>
       </select>
       @error('subcategory_id')
@@ -119,12 +88,7 @@
       <label for="department_id" class="block text-sm font-medium mb-1">
         Departemen
       </label>
-      <select
-        id="department_id"
-        name="department_id"
-        class="border p-2 rounded w-full"
-        required
-      >
+      <select id="department_id" name="department_id" class="border p-2 rounded w-full" required>
         @foreach($departments as $id => $name)
           <option value="{{ $id }}" @selected(old('department_id', $ptk->department_id) == $id)>
             {{ $name }}
@@ -141,12 +105,7 @@
       <label for="pic_user_id" class="block text-sm font-medium mb-1">
         PIC
       </label>
-      <select
-        id="pic_user_id"
-        name="pic_user_id"
-        class="border p-2 rounded w-full"
-        required
-      >
+      <select id="pic_user_id" name="pic_user_id" class="border p-2 rounded w-full" required>
         @foreach($picCandidates as $u)
           <option value="{{ $u->id }}" @selected(old('pic_user_id', $ptk->pic_user_id) == $u->id)>
             {{ $u->name }}
@@ -163,14 +122,8 @@
       <label for="due_date" class="block text-sm font-medium mb-1">
         Due date
       </label>
-      <input
-        id="due_date"
-        type="date"
-        name="due_date"
-        class="border p-2 rounded w-full"
-        required
-        value="{{ old('due_date', optional($ptk->due_date)->format('Y-m-d')) }}"
-      >
+      <input id="due_date" type="date" name="due_date" class="border p-2 rounded w-full" required
+        value="{{ old('due_date', optional($ptk->due_date)->format('Y-m-d')) }}">
       @error('due_date')
         <small class="text-red-600">{{ $message }}</small>
       @enderror
@@ -181,30 +134,22 @@
       <label for="form_date" class="block text-sm font-medium mb-1">
         Tanggal Form (Tanggal PTK Asli)
       </label>
-      <input
-        id="form_date"
-        type="date"
-        name="form_date"
-        value="{{ old('form_date', optional($ptk->form_date)->format('Y-m-d')) }}"
-        class="border p-2 rounded w-full"
-        required
-      >
+      <input id="form_date" type="date" name="form_date"
+        value="{{ old('form_date', optional($ptk->form_date)->format('Y-m-d')) }}" class="border p-2 rounded w-full"
+        required>
       @error('form_date')
         <small class="text-red-600">{{ $message }}</small>
       @enderror
     </div>
 
     {{-- Deskripsi --}}
+    @unlessrole('admin_mtc|kabag_mtc')
     <div class="md:col-span-2">
       <label for="description" class="block text-sm font-medium mb-1">
         Deskripsi
       </label>
-      <textarea
-        id="description"
-        name="description"
-        rows="6"
-        class="border p-2 rounded w-full"
-      >{{ old('description', $ptk->description) }}</textarea>
+      <textarea id="description" name="description" rows="6"
+        class="border p-2 rounded w-full">{{ old('description', $ptk->description) }}</textarea>
       @error('description')
         <small class="text-red-600">{{ $message }}</small>
       @enderror
@@ -215,11 +160,8 @@
       <label class="block text-sm font-medium mb-1">
         Deskripsi Ketidaksesuaian
       </label>
-      <textarea
-        name="desc_nc"
-        rows="5"
-        class="border p-2 rounded w-full"
-      >{{ old('desc_nc', $ptk->desc_nc ?? '') }}</textarea>
+      <textarea name="desc_nc" rows="5"
+        class="border p-2 rounded w-full">{{ old('desc_nc', $ptk->desc_nc ?? '') }}</textarea>
       @error('desc_nc')
         <small class="text-red-600">{{ $message }}</small>
       @enderror
@@ -230,11 +172,8 @@
       <label class="block text-sm font-medium mb-1">
         Evaluasi Masalah
       </label>
-      <textarea
-        name="evaluation"
-        rows="5"
-        class="border p-2 rounded w-full"
-      >{{ old('evaluation', $ptk->evaluation ?? '') }}</textarea>
+      <textarea name="evaluation" rows="5"
+        class="border p-2 rounded w-full">{{ old('evaluation', $ptk->evaluation ?? '') }}</textarea>
       @error('evaluation')
         <small class="text-red-600">{{ $message }}</small>
       @enderror
@@ -245,11 +184,8 @@
       <label class="block text-sm font-medium mb-1">
         3a. Koreksi (perbaikan masalah) dan Tindakan Korektif (akar masalah)
       </label>
-      <textarea
-        name="action_correction"
-        rows="5"
-        class="border p-2 rounded w-full"
-      >{{ old('action_correction', $ptk->action_correction ?? '') }}</textarea>
+      <textarea name="action_correction" rows="5"
+        class="border p-2 rounded w-full">{{ old('action_correction', $ptk->action_correction ?? '') }}</textarea>
       @error('action_correction')
         <small class="text-red-600">{{ $message }}</small>
       @enderror
@@ -260,29 +196,237 @@
       <label class="block text-sm font-medium mb-1">
         4. Hasil Uji Coba
       </label>
-      <textarea
-        name="action_corrective"
-        rows="5"
-        class="border p-2 rounded w-full"
-      >{{ old('action_corrective', $ptk->action_corrective ?? '') }}</textarea>
+      <textarea name="action_corrective" rows="5"
+        class="border p-2 rounded w-full">{{ old('action_corrective', $ptk->action_corrective ?? '') }}</textarea>
       @error('action_corrective')
         <small class="text-red-600">{{ $message }}</small>
       @enderror
     </div>
+    @endunlessrole
+
+    {{-- ========================================================= --}}
+    {{-- MODUL KHUSUS MTC (Machine) --}}
+    {{-- ========================================================= --}}
+    @hasanyrole('admin_mtc|kabag_mtc')
+    <div class="md:col-span-2 border-t border-b my-4 bg-gray-50 dark:bg-gray-800 p-4 rounded" 
+         x-data="{ 
+            needsSparepart: {{ $errors->any() ? (old('mtc.needs_sparepart') ? 'true' : 'false') : ($ptk->mtcDetail?->needs_sparepart ? 'true' : 'false') }},
+            spList: {{ $errors->any() ? json_encode(array_values(old('spareparts', []))) : json_encode($ptk->mtcDetail?->spareparts->values() ?? []) }}
+         }"
+         x-init="
+            console.log('Original Count:', spList.length);
+            
+            // 1. FORMAT DATE & DEFAULT STATUS
+            spList = spList.map(s => {
+                s.order_date = s.order_date ? String(s.order_date).substring(0, 10) : '';
+                s.est_arrival_date = s.est_arrival_date ? String(s.est_arrival_date).substring(0, 10) : '';
+                s.actual_arrival_date = s.actual_arrival_date ? String(s.actual_arrival_date).substring(0, 10) : '';
+                s.status = s.status || 'Requested';
+                return s;
+            });
+
+            // 2. AGGRESSIVE DEDUPLICATION
+            // Hanya simpan item jika ID-nya belum pernah ada di Map.
+            // Item tanpa ID dianggap unik.
+            const uniqueMap = new Map();
+            const cleanList = [];
+            
+            spList.forEach(item => {
+                if (item.id) {
+                    if (!uniqueMap.has(item.id)) {
+                        uniqueMap.set(item.id, true);
+                        cleanList.push(item);
+                    }
+                } else {
+                    // Item baru (belum save DB) -> simpan
+                    cleanList.push(item);
+                }
+            });
+            
+            spList = cleanList;
+            console.log('Deduped Count:', spList.length);
+
+            // 3. Ensure at least one row if empty
+            if(spList.length === 0) {
+                spList.push({name:'', spec:'', qty:1, supplier:'', order_date:'', status:'Requested', est_arrival_date:'', actual_arrival_date:''});
+            }
+         ">
+
+      <h3 class="font-semibold text-base mb-3 text-indigo-600">B. Spesifik Machine (Maintenance)</h3>
+
+      {{-- 1. Deskripsi Kerusakan --}}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <label class="block">
+          <span class="block text-sm font-medium mb-1">Deskripsi Kerusakan Mesin</span>
+          <textarea style="background-color: white;" name="mtc[machine_damage_desc]" rows="5"
+            class="w-full border p-2 rounded"
+            placeholder="Apa yang rusak? Dampak ke produksi?">{{ old('mtc.machine_damage_desc', $ptk->mtcDetail->machine_damage_desc ?? '') }}</textarea>
+        </label>
+
+        <div class="space-y-4">
+          <label class="block">
+            <span class="block text-sm font-medium mb-1">Status Mesin</span>
+            <select style="background-color: white;" name="mtc[machine_stop_status]" class="w-full border p-2 rounded">
+              <option value="">-- Pilih --</option>
+              <option value="total" @selected(old('mtc.machine_stop_status', $ptk->mtcDetail->machine_stop_status ?? '') == 'total')>Berhenti Total (Breakdown)</option>
+              <option value="partial" @selected(old('mtc.machine_stop_status', $ptk->mtcDetail->machine_stop_status ?? '') == 'partial')>Berhenti Parsial (Masih bisa jalan)</option>
+            </select>
+          </label>
+          <label class="block">
+            <span class="block text-sm font-medium mb-1">Evaluasi Masalah</span>
+            <textarea style="background-color: white;" name="mtc[problem_evaluation]" rows="2"
+              class="w-full border p-2 rounded">{{ old('mtc.problem_evaluation', $ptk->mtcDetail->problem_evaluation ?? '') }}</textarea>
+          </label>
+        </div>
+      </div>
+
+      {{-- C. Gate Sparepart --}}
+      <div class="mb-4">
+        <label class="inline-flex items-center space-x-2 font-medium text-sm text-gray-800 dark:text-gray-100">
+          <input type="hidden" name="mtc[needs_sparepart]" value="0">
+          <input type="checkbox" name="mtc[needs_sparepart]" value="1" x-model="needsSparepart"
+            class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500">
+          <span>Apakah membutuhkan order sparepart?</span>
+        </label>
+      </div>
+
+      {{-- D. Modul Sparepart --}}
+      <div x-show="needsSparepart" x-transition class="mb-4 border p-3 rounded bg-white dark:bg-gray-900">
+        <h4 class="font-semibold text-sm mb-2">D. Data Order Sparepart</h4>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left bg-gray-100 dark:bg-gray-700">
+                <th class="p-2">Nama Sparepart</th>
+                <th class="p-2">Spec</th>
+                <th class="p-2 w-16">Qty</th>
+                <th class="p-2">Supplier</th>
+                <th class="p-2">Tgl Order</th>
+                <th class="p-2">Status</th>
+                <th class="p-2">Est. Datang</th>
+                <th class="p-2">Tgl Datang</th>
+                <th class="p-2">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="(row, index) in spList" :key="row.id ? row.id : ('new_' + index)">
+                <tr>
+                  <td class="p-1">
+                    <input type="hidden" :name="'spareparts['+index+'][id]'" x-model="row.id">
+                    <input type="text" :name="'spareparts['+index+'][name]'" x-model="row.name"
+                      class="w-full border p-1 rounded min-w-[120px]" placeholder="Nama..." required>
+                  </td>
+                  <td class="p-1">
+                    <input type="text" :name="'spareparts['+index+'][spec]'" x-model="row.spec"
+                      class="w-full border p-1 rounded min-w-[100px]">
+                  </td>
+                  <td class="p-1">
+                    <input type="number" :name="'spareparts['+index+'][qty]'" x-model="row.qty"
+                      class="w-full border p-1 rounded text-center w-16">
+                  </td>
+                  <td class="p-1">
+                    <input type="text" :name="'spareparts['+index+'][supplier]'" x-model="row.supplier"
+                      class="w-full border p-1 rounded min-w-[100px]">
+                  </td>
+                  <td class="p-1">
+                    <input type="date" :name="'spareparts['+index+'][order_date]'"
+                      x-model="row.order_date"
+                      class="w-full border p-1 rounded">
+                  </td>
+                  <td class="p-1">
+                    <select :name="'spareparts['+index+'][status]'" x-model="row.status"
+                      class="w-full border p-1 rounded">
+                      <option value="Requested">Requested</option>
+                      <option value="Ordered">Ordered</option>
+                      <option value="Shipped">Shipped</option>
+                      <option value="Received">Received</option>
+                    </select>
+                  </td>
+                  <td class="p-1">
+                    <input type="date" :name="'spareparts['+index+'][est_arrival_date]'"
+                      x-model="row.est_arrival_date"
+                      class="w-full border p-1 rounded">
+                  </td>
+                  <td class="p-1">
+                    <input type="date" :name="'spareparts['+index+'][actual_arrival_date]'"
+                      x-model="row.actual_arrival_date"
+                      class="w-full border p-1 rounded">
+                  </td>
+                  <td class="p-1 text-center">
+                    <button type="button" @click="spList.splice(index, 1)"
+                      class="text-red-600 hover:text-red-800">x</button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+        <button type="button" @click="spList.push({name:'', spec:'', qty:1, supplier:'', status:'Requested', order_date:'', est_arrival_date:'', actual_arrival_date:''})"
+          class="mt-2 text-sm text-blue-600 hover:underline">+ Tambah Baris</button>
+      </div>
+
+      {{-- E. Koreksi & Perbaikan (Sparepart datang) --}}
+      <div x-show="spList.length > 0 && needsSparepart" x-transition
+        class="mb-4 bg-white dark:bg-gray-900 p-3 rounded border">
+        <h4 class="font-semibold text-sm mb-2">E. Koreksi & Perbaikan (Setelah Sparepart Datang)</h4>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label class="block">
+            <span class="block text-sm font-medium mb-1">Tanggal Pemasangan</span>
+            <input type="date" name="mtc[installation_date]"
+              value="{{ old('mtc.installation_date', $ptk->mtcDetail->installation_date ?? '') }}"
+              class="w-full border p-2 rounded">
+          </label>
+          <label class="block">
+            <span class="block text-sm font-medium mb-1">Perbaikan Oleh</span>
+            <input type="text" name="mtc[repaired_by]"
+              value="{{ old('mtc.repaired_by', $ptk->mtcDetail->repaired_by ?? '') }}" class="w-full border p-2 rounded"
+              placeholder="Nama teknisi / vendor">
+          </label>
+          <label class="block md:col-span-2">
+            <span class="block text-sm font-medium mb-1">Catatan Teknis</span>
+            <textarea name="mtc[technical_notes]" rows="3"
+              class="w-full border p-2 rounded">{{ old('mtc.technical_notes', $ptk->mtcDetail->technical_notes ?? '') }}</textarea>
+          </label>
+        </div>
+      </div>
+
+      {{-- F. Hasil Uji Coba --}}
+      <div class="mb-2 bg-white dark:bg-gray-900 p-3 rounded border">
+        <h4 class="font-semibold text-sm mb-2">F. Hasil Uji Coba</h4>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label class="block">
+            <span class="block text-sm font-medium mb-1">Status Mesin Setelah Perbaikan</span>
+            <select name="mtc[machine_status_after]" class="w-full border p-2 rounded">
+              <option value="">-- Pilih --</option>
+              <option value="normal" @selected(old('mtc.machine_status_after', $ptk->mtcDetail->machine_status_after ?? '') == 'normal')>Berjalan Normal</option>
+              <option value="trouble" @selected(old('mtc.machine_status_after', $ptk->mtcDetail->machine_status_after ?? '') == 'trouble')>Masih Bermasalah</option>
+            </select>
+          </label>
+          <label class="block">
+            <span class="block text-sm font-medium mb-1">Jam Uji Coba (Running Hours)</span>
+            <input type="number" name="mtc[trial_hours]"
+              value="{{ old('mtc.trial_hours', $ptk->mtcDetail->trial_hours ?? '') }}"
+              class="w-full border p-2 rounded">
+          </label>
+          <label class="block md:col-span-2">
+            <span class="block text-sm font-medium mb-1">Hasil Pengamatan</span>
+            <textarea name="mtc[trial_result]" rows="3"
+              class="w-full border p-2 rounded">{{ old('mtc.trial_result', $ptk->mtcDetail->trial_result ?? '') }}</textarea>
+          </label>
+        </div>
+      </div>
+
+    </div>
+    @endhasanyrole
 
     {{-- Lampiran (tambah baru) --}}
     <div class="md:col-span-2">
       <label for="attachments" class="block text-sm font-medium mb-1">
         Lampiran (tambah)
       </label>
-      <input
-        id="attachments"
-        type="file"
-        name="attachments[]"
-        multiple
-        accept=".jpg,.jpeg,.png,.pdf"
-        class="border p-2 rounded w-full"
-      >
+      <input id="attachments" type="file" name="attachments[]" multiple accept=".jpg,.jpeg,.png,.pdf"
+        class="border p-2 rounded w-full">
       @error('attachments.*')
         <small class="text-red-600">{{ $message }}</small>
       @enderror
@@ -298,41 +442,27 @@
         <ul class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
           @foreach($ptk->attachments as $att)
             @php
-              $url   = asset(Storage::url($att->path));
+              $url = asset(Storage::url($att->path));
               $isImg = str_starts_with(strtolower($att->mime ?? ''), 'image/');
             @endphp
 
             <li class="relative group">
               {{-- Tombol Hapus: pakai form global di bawah --}}
-              <button
-                type="button"
+              <button type="button"
                 class="delete-attachment absolute -top-2 -right-2 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs shadow opacity-80 group-hover:opacity-100"
-                data-att-delete-url="{{ route('ptk.attachment.delete', $att->id) }}"
-                title="Hapus lampiran"
-              >
+                data-att-delete-url="{{ route('ptk.attachment.delete', $att->id) }}" title="Hapus lampiran">
                 ×
               </button>
 
               {{-- Gambar / File --}}
               @if($isImg)
-                <a
-                  href="{{ $url }}"
-                  target="_blank"
-                  class="block w-full aspect-[4/3] overflow-hidden rounded-lg ring-1 ring-gray-200 bg-gray-50"
-                >
-                  <img
-                    src="{{ $url }}"
-                    alt="{{ $att->original_name }}"
-                    loading="lazy"
-                    class="w-full h-full object-contain"
-                  >
+                <a href="{{ $url }}" target="_blank"
+                  class="block w-full aspect-[4/3] overflow-hidden rounded-lg ring-1 ring-gray-200 bg-gray-50">
+                  <img src="{{ $url }}" alt="{{ $att->original_name }}" loading="lazy" class="w-full h-full object-contain">
                 </a>
               @else
-                <a
-                  href="{{ $url }}"
-                  target="_blank"
-                  class="flex items-center justify-center w-full aspect-[4/3] rounded-lg ring-1 ring-gray-200 bg-gray-50"
-                >
+                <a href="{{ $url }}" target="_blank"
+                  class="flex items-center justify-center w-full aspect-[4/3] rounded-lg ring-1 ring-gray-200 bg-gray-50">
                   <span class="text-xs">
                     {{ strtoupper(pathinfo($att->original_name, PATHINFO_EXTENSION)) }}
                   </span>
@@ -353,10 +483,7 @@
       <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded">
         Simpan
       </button>
-      <a
-        href="{{ route('ptk.show', $ptk) }}"
-        class="ml-2 underline"
-      >
+      <a href="{{ route('ptk.show', $ptk) }}" class="ml-2 underline">
         Batal
       </a>
     </div>

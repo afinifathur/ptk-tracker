@@ -53,22 +53,22 @@ class PTK extends Model implements AuditableContract
     // CASTS
     // =====================================================================
     protected $casts = [
-        'due_date'           => 'datetime',
-        'form_date'          => 'datetime',
-        'approved_at'        => 'datetime',
+        'due_date' => 'datetime',
+        'form_date' => 'datetime',
+        'approved_at' => 'datetime',
         'approved_stage1_at' => 'datetime',
         'approved_stage2_at' => 'datetime',
-        'last_reject_at'     => 'datetime',
+        'last_reject_at' => 'datetime',
     ];
 
     // =====================================================================
     // STATUS CONSTANTS
     // =====================================================================
-    public const STATUS_NOT_STARTED      = 'Not Started';
-    public const STATUS_IN_PROGRESS      = 'In Progress';
-    public const STATUS_SUBMITTED        = 'Submitted';
+    public const STATUS_NOT_STARTED = 'Not Started';
+    public const STATUS_IN_PROGRESS = 'In Progress';
+    public const STATUS_SUBMITTED = 'Submitted';
     public const STATUS_WAITING_DIRECTOR = 'Waiting Director';
-    public const STATUS_COMPLETED        = 'Completed';
+    public const STATUS_COMPLETED = 'Completed';
 
     // =====================================================================
     // MUTATORS
@@ -98,18 +98,33 @@ class PTK extends Model implements AuditableContract
         }
 
         if ($user->hasRole('kabag_qc')) {
-            return $q->whereHas('pic.roles', fn($r) =>
+            return $q->whereHas(
+                'pic.roles',
+                fn($r) =>
                 $r->whereIn('name', ['admin_qc_flange', 'admin_qc_fitting'])
             );
         }
 
         if ($user->hasRole('manager_hr')) {
-            return $q->whereHas('pic.roles', fn($r) =>
+            return $q->whereHas(
+                'pic.roles',
+                fn($r) =>
                 $r->whereIn('name', ['admin_hr', 'admin_k3'])
             );
         }
 
-        return $q->where('pic_user_id', $user->id);
+        if ($user->hasRole('kabag_mtc')) {
+            return $q->whereHas(
+                'pic.roles',
+                fn($r) =>
+                $r->whereIn('name', ['admin_mtc'])
+            );
+        }
+
+        return $q->where(function ($query) use ($user) {
+            $query->where('pic_user_id', $user->id)
+                ->orWhere('created_by', $user->id);
+        });
     }
 
     // =====================================================================
@@ -230,5 +245,10 @@ class PTK extends Model implements AuditableContract
     public function approverStage2(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_stage2_by');
+    }
+
+    public function mtcDetail()
+    {
+        return $this->hasOne(PtkMtcDetail::class, 'ptk_id');
     }
 }

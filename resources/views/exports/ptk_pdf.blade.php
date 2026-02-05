@@ -182,39 +182,128 @@
     </tr>
   </table>
 
-  {{-- DESKRIPSI (4 bagian) --}}
-  <table class="mb10">
-    <tr>
-      <th>1) Deskripsi Ketidaksesuaian</th>
-    </tr>
-    <tr>
-      <td>{!! nl2br(e($ptk->desc_nc ?? '-')) !!}</td>
-    </tr>
-  </table>
-  <table class="mb10">
-    <tr>
-      <th>2) Evaluasi Masalah</th>
-    </tr>
-    <tr>
-      <td>{!! nl2br(e($ptk->evaluation ?? '-')) !!}</td>
-    </tr>
-  </table>
-  <table class="mb10">
-    <tr>
-      <th>3a) Koreksi (Perbaikan Masalah) dan Tindakan Korektif (Akar Masalah)</th>
-    </tr>
-    <tr>
-      <td>{!! nl2br(e($ptk->action_correction ?? '-')) !!}</td>
-    </tr>
-  </table>
-  <table class="mb10">
-    <tr>
-      <th>4) Hasil Uji Coba</th>
-    </tr>
-    <tr>
-      <td>{!! nl2br(e($ptk->action_corrective ?? '-')) !!}</td>
-    </tr>
-  </table>
+  {{-- DESKRIPSI (Conditional) --}}
+  @if($ptk->mtcDetail)
+    {{-- LAYOUT KHUSUS MTC --}}
+    <table class="grid2 mb10">
+      <tr>
+        <td>
+          <strong>1) Deskripsi Kerusakan Mesin</strong><br>
+          {{ $ptk->mtcDetail->machine_damage_desc ?? '-' }}
+        </td>
+        <td>
+          <strong>Status Mesin</strong><br>
+          {{ strtoupper($ptk->mtcDetail->machine_stop_status ?? '-') }}
+        </td>
+      </tr>
+    </table>
+
+    <table class="mb10">
+      <tr>
+        <th>2) Evaluasi Masalah</th>
+      </tr>
+      <tr>
+        <td>{!! nl2br(e($ptk->mtcDetail->problem_evaluation ?? '-')) !!}</td>
+      </tr>
+    </table>
+
+    {{-- Sparepart List --}}
+    @if($ptk->mtcDetail->spareparts->count() > 0)
+      <table class="mb10">
+        <thead>
+          <tr>
+            <th colspan="5">3) Data Sparepart</th>
+          </tr>
+          <tr>
+            <td style="background:#eee; font-weight:bold;">Nama Item</td>
+            <td style="background:#eee; font-weight:bold; width:30px;">Qty</td>
+            <td style="background:#eee; font-weight:bold;">Tgl Order</td>
+            <td style="background:#eee; font-weight:bold;">Status</td>
+            <td style="background:#eee; font-weight:bold;">Est Arrival</td>
+            <td style="background:#eee; font-weight:bold;">Actual Arrival</td>
+          </tr>
+        </thead>
+        <tbody>
+          @foreach($ptk->mtcDetail->spareparts as $sp)
+            <tr>
+              <td>
+                {{ $sp->name }}<br>
+                <small style="color:#666">{{ $sp->spec }}</small>
+              </td>
+              <td style="text-align:center;">{{ $sp->qty }}</td>
+              <td>{{ $sp->order_date?->format('d M Y') ?? '-' }}</td>
+              <td>{{ $sp->status }}</td>
+              <td>{{ $sp->est_arrival_date?->format('d M Y') ?? '-' }}</td>
+              <td>{{ $sp->actual_arrival_date?->format('d M Y') ?? '-' }}</td>
+            </tr>
+          @endforeach
+        </tbody>
+      </table>
+    @endif
+
+    <table class="grid2 mb10">
+      <tr>
+        <td>
+          <strong>4) Koreksi & Perbaikan</strong><br>
+          Tgl Pasang: {{ $ptk->mtcDetail->installation_date?->format('d M Y') ?? '-' }}<br>
+          Oleh: {{ $ptk->mtcDetail->repaired_by ?? '-' }}
+        </td>
+        <td>
+          <strong>Catatan Teknis</strong><br>
+          {!! nl2br(e($ptk->mtcDetail->technical_notes ?? '-')) !!}
+        </td>
+      </tr>
+    </table>
+
+    <table class="grid2 mb10">
+      <tr>
+        <td>
+          <strong>5) Hasil Uji Coba</strong><br>
+          Status Akhir: {{ strtoupper($ptk->mtcDetail->machine_status_after ?? '-') }}<br>
+          Running Hours: {{ $ptk->mtcDetail->trial_hours ?? '-' }} jam
+        </td>
+        <td>
+          <strong>Pengamatan</strong><br>
+          {!! nl2br(e($ptk->mtcDetail->trial_result ?? '-')) !!}
+        </td>
+      </tr>
+    </table>
+
+  @else
+    {{-- LAYOUT STANDARD --}}
+    <table class="mb10">
+      <tr>
+        <th>1) Deskripsi Ketidaksesuaian</th>
+      </tr>
+      <tr>
+        <td>{!! nl2br(e($ptk->desc_nc ?? '-')) !!}</td>
+      </tr>
+    </table>
+    <table class="mb10">
+      <tr>
+        <th>2) Evaluasi Masalah</th>
+      </tr>
+      <tr>
+        <td>{!! nl2br(e($ptk->evaluation ?? '-')) !!}</td>
+      </tr>
+    </table>
+    <table class="mb10">
+      <tr>
+        <th>3a) Koreksi (Perbaikan Masalah) dan Tindakan Korektif (Akar Masalah)</th>
+      </tr>
+      <tr>
+        <td>{!! nl2br(e($ptk->action_correction ?? '-')) !!}</td>
+      </tr>
+    </table>
+    <table class="mb10">
+      <tr>
+        <th>4) Hasil Uji Coba</th>
+      </tr>
+      <tr>
+        <td>{!! nl2br(e($ptk->action_corrective ?? '-')) !!}</td>
+      </tr>
+    </table>
+  @endif
 
   {{-- LAMPIRAN FOTO (maks 6) --}}
   @php $displayed = $ptk->attachments->take(6); @endphp

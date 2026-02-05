@@ -85,15 +85,28 @@ class PTKController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        // number wajib & unik; due_date wajib; title max 200
-        $data = $request->validate($this->rulesForStore());
+        // 1. Validation Logic
+        $user = $request->user();
+        $isMtc = $user->hasAnyRole(['admin_mtc', 'kabag_mtc']);
 
-        // kolom sistem
-        $data['created_by'] = $request->user()->id;
+        $rules = $this->rulesForStore();
+        if ($isMtc) {
+            $rules = array_merge($rules, $this->rulesForMtc());
+        }
 
-        // gunakan PIC dari form (tidak dioverride), konsisten dengan view
-        $ptk = PTK::create(collect($data)->except('attachments')->toArray());
+        $data = $request->validate($rules);
+
+        // 2. Create PTK Core
+        $ptkData = collect($data)->except(['attachments', 'mtc', 'spareparts'])->toArray();
+        $ptkData['created_by'] = $user->id;
+
+        $ptk = PTK::create($ptkData);
         $this->handleAttachments($request, $ptk->id);
+
+        // 3. Handle MTC Details
+        if ($isMtc) {
+            $this->storeMtcDetails($ptk, $request);
+        }
 
         return redirect()->route('ptk.index')->with('ok', 'PTK tersimpan.');
     }
@@ -112,6 +125,7 @@ class PTKController extends Controller
             'subcategory:id,name',
             'creator:id,name',
             'attachments',
+            'mtcDetail.spareparts', // Load MTC details
         ]);
 
         return view('ptk.show', compact('ptk'));
@@ -119,6 +133,8 @@ class PTKController extends Controller
 
     public function edit(Request $request, PTK $ptk): View
     {
+        $ptk->load('mtcDetail.spareparts');
+
         return view('ptk.edit', [
             'ptk' => $ptk,
             'departments' => Department::orderBy('name')->pluck('name', 'id'),
@@ -129,16 +145,28 @@ class PTKController extends Controller
 
     public function update(Request $request, PTK $ptk): RedirectResponse
     {
-        // number unik tetapi mengabaikan id PTK sendiri
-        $data = $request->validate($this->rulesForUpdate($ptk));
+        $user = $request->user();
+        $isMtc = $user->hasAnyRole(['admin_mtc', 'kabag_mtc']);
+
+        $rules = $this->rulesForUpdate($ptk);
+        if ($isMtc) {
+            $rules = array_merge($rules, $this->rulesForMtc());
+        }
+
+        $data = $request->validate($rules);
 
         // Auto set In Progress ketika evaluation diisi dari Not Started
         if ($request->filled('evaluation') && $ptk->status === 'Not Started') {
             $data['status'] = 'In Progress';
         }
 
-        $ptk->update(collect($data)->except('attachments')->toArray());
+        $ptk->update(collect($data)->except(['attachments', 'mtc', 'spareparts'])->toArray());
         $this->handleAttachments($request, $ptk->id);
+
+        // Handle MTC Details
+        if ($isMtc) {
+            $this->storeMtcDetails($ptk, $request);
+        }
 
         return back()->with('ok', 'Perubahan disimpan.');
     }
@@ -386,6 +414,62 @@ class PTKController extends Controller
         foreach ((array) $request->file('attachments') as $file) {
             if ($file) {
                 $this->attachments->handle($file, $ptkId);
+            }
+        }
+    }
+
+    private function rulesForMtc(): array
+    {
+        return [
+            // MTC Detail
+            'mtc.machine_damage_desc' => 'nullable|string',
+            'mtc.machine_stop_status' => 'nullable|in:total,partial',
+            'mtc.problem_evaluation' => 'nullable|string',
+            'mtc.needs_sparepart' => 'nullable|boolean', // 1 or 0
+            'mtc.installation_date' => 'nullable|date',
+            'mtc.repaired_by' => 'nullable|string|max:100',
+            'mtc.technical_notes' => 'nullable|string',
+            'mtc.machine_status_after' => 'nullable|in:normal,trouble',
+            'mtc.trial_hours' => 'nullable|integer',
+            'mtc.trial_result' => 'nullable|string',
+
+            // Spareparts (Array)
+            'spareparts' => 'nullable|array',
+            'spareparts.*.name' => 'required_with:spareparts|string|max:255',
+            'spareparts.*.spec' => 'nullable|string|max:255',
+            'spareparts.*.qty' => 'nullable|integer|min:1',
+            'spareparts.*.supplier' => 'nullable|string|max:255',
+            'spareparts.*.order_date' => 'nullable|date',
+            'spareparts.*.status' => 'nullable|in:Requested,Ordered,Shipped,Received',
+            'spareparts.*.est_arrival_date' => 'nullable|date',
+            'spareparts.*.actual_arrival_date' => 'nullable|date',
+        ];
+    }
+
+    private function storeMtcDetails(PTK $ptk, Request $request): void
+    {
+        // 1. Update/Create Parent MTC Detail
+        $mtcData = $request->input('mtc', []);
+
+        // Ensure boolean is handled (checkbox often sends '1' or nothing)
+        $mtcData['needs_sparepart'] = $request->boolean('mtc.needs_sparepart');
+
+        $detail = $ptk->mtcDetail()->updateOrCreate(
+            ['ptk_id' => $ptk->id],
+            $mtcData
+        );
+
+        // 2. Sync Spareparts
+        // Strategy: Delete all existing and re-create (simplest for dynamic lists)
+        $detail->spareparts()->delete();
+
+        if ($request->has('spareparts') && $mtcData['needs_sparepart']) {
+            foreach ($request->input('spareparts') as $sp) {
+                // Ignore empty rows if any
+                if (empty($sp['name']))
+                    continue;
+
+                $detail->spareparts()->create($sp);
             }
         }
     }

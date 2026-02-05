@@ -1,45 +1,45 @@
 <x-layouts.app>
   @php
     // ===== Guards & defaults =====
-    $items         = ($items ?? ($ptks ?? collect())) ?? collect();
-    $categories    = $categories    ?? collect();
-    $departments   = $departments   ?? collect();
+    $items = ($items ?? ($ptks ?? collect())) ?? collect();
+    $categories = $categories ?? collect();
+    $departments = $departments ?? collect();
     $subcategories = $subcategories ?? collect();
 
     // Top 3 (opsional)
-    $topCategories    = $topCategories    ?? collect();
-    $topDepartments   = $topDepartments   ?? collect();
+    $topCategories = $topCategories ?? collect();
+    $topDepartments = $topDepartments ?? collect();
     $topSubcategories = $topSubcategories ?? collect();
 
     // ===== Filters in-use =====
     $filters = [
-      'start'          => $start ?? ($data['start'] ?? request('start')),
-      'end'            => $end   ?? ($data['end']   ?? request('end')),
-      'category_id'    => $selected['category_id']    ?? ($data['category_id']    ?? request('category_id')),
+      'start' => $start ?? ($data['start'] ?? request('start')),
+      'end' => $end ?? ($data['end'] ?? request('end')),
+      'category_id' => $selected['category_id'] ?? ($data['category_id'] ?? request('category_id')),
       'subcategory_id' => $selected['subcategory_id'] ?? ($data['subcategory_id'] ?? request('subcategory_id')),
-      'department_id'  => $selected['department_id']  ?? ($data['department_id']  ?? request('department_id')),
-      'status'         => $selected['status']         ?? ($data['status']         ?? request('status')),
+      'department_id' => $selected['department_id'] ?? ($data['department_id'] ?? request('department_id')),
+      'status' => $selected['status'] ?? ($data['status'] ?? request('status')),
     ];
 
     // ===== Labels ringkasan =====
-    $metaCategory   = ($category_name    ?? null);
-    $metaSubcat     = ($subcategory_name ?? null);
-    $metaDept       = ($department_name  ?? null);
-    $metaStatus     = ($status_label     ?? null);
+    $metaCategory = ($category_name ?? null);
+    $metaSubcat = ($subcategory_name ?? null);
+    $metaDept = ($department_name ?? null);
+    $metaStatus = ($status_label ?? null);
 
     $cat = $metaCategory
-          ?? optional($categories->firstWhere('id', $filters['category_id']))->name
-          ?? 'Semua';
+      ?? optional($categories->firstWhere('id', $filters['category_id']))->name
+      ?? 'Semua';
     $sub = $metaSubcat
-          ?? optional($subcategories->firstWhere('id', $filters['subcategory_id']))->name
-          ?? 'Semua';
+      ?? optional($subcategories->firstWhere('id', $filters['subcategory_id']))->name
+      ?? 'Semua';
     $dep = $metaDept
-          ?? optional($departments->firstWhere('id', $filters['department_id']))->name
-          ?? 'Semua';
+      ?? optional($departments->firstWhere('id', $filters['department_id']))->name
+      ?? 'Semua';
     $sts = $metaStatus ?? ($filters['status'] ?: 'Semua');
 
     $rangeStart = $filters['start'] ?: '-';
-    $rangeEnd   = $filters['end']   ?: '-';
+    $rangeEnd = $filters['end'] ?: '-';
   @endphp
 
   <div class="flex items-center justify-between mb-3">
@@ -48,7 +48,7 @@
       <div class="text-sm text-gray-500">
         Kategori <strong>{{ $cat }}</strong> ·
         Subkategori <strong>{{ $sub }}</strong> ·
-        Departemen <strong>{{ $dep }}</strong> ·
+        Departemen / Role <strong>{{ $dep }}</strong> ·
         Status <strong>{{ $sts }}</strong>
       </div>
     </div>

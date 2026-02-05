@@ -1,32 +1,69 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
   <meta charset="utf-8">
   <style>
     /* ===== Basic PDF styles ===== */
-    body { font-family: DejaVu Sans, sans-serif; font-size: 12px; color: #111; }
-    h2   { margin: 0 0 6px; }
-    p.small { margin: 0 0 10px; font-size: 11px; color: #555; }
-    p.meta  { margin: 0 0 12px; font-size: 11px; color: #555; }
+    body {
+      font-family: DejaVu Sans, sans-serif;
+      font-size: 12px;
+      color: #111;
+    }
 
-    table { width: 100%; border-collapse: collapse; }
-    th, td { border: 1px solid #666; padding: 6px 8px; vertical-align: top; }
-    th { background: #eee; }
-    .w-title { width: 38%; }
-    .text-right { text-align: right; }
+    h2 {
+      margin: 0 0 6px;
+    }
+
+    p.small {
+      margin: 0 0 10px;
+      font-size: 11px;
+      color: #555;
+    }
+
+    p.meta {
+      margin: 0 0 12px;
+      font-size: 11px;
+      color: #555;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      border: 1px solid #666;
+      padding: 6px 8px;
+      vertical-align: top;
+    }
+
+    th {
+      background: #eee;
+    }
+
+    .w-title {
+      width: 38%;
+    }
+
+    .text-right {
+      text-align: right;
+    }
   </style>
 </head>
+
 <body>
   @php
     // Fallback untuk start/end jika meta belum dikirim
     $metaStart = $start ?? ($data['start'] ?? null);
-    $metaEnd   = $end   ?? ($data['end']   ?? null);
+    $metaEnd = $end ?? ($data['end'] ?? null);
 
     // Label dari rangeMeta(); fallback ke 'Semua' bila kosong
-    $catLabel  = $category_name    ?? 'Semua';
-    $subLabel  = $subcategory_name ?? 'Semua';
-    $depLabel  = $department_name  ?? 'Semua';
-    $stsLabel  = $status_label     ?? 'Semua';
+    $catLabel = $category_name ?? 'Semua';
+    $subLabel = $subcategory_name ?? 'Semua';
+    $depLabel = $department_name ?? 'Semua';
+    $stsLabel = $status_label ?? 'Semua';
   @endphp
 
   <h2>Laporan PTK</h2>
@@ -36,7 +73,7 @@
     Periode: {{ $metaStart ?: 'Semua' }} s/d {{ $metaEnd ?: 'Semua' }} •
     Kategori: {{ $catLabel }} •
     Subkategori: {{ $subLabel }} •
-    Departemen: {{ $depLabel }} •
+    Departemen / Role: {{ $depLabel }} •
     Status: {{ $stsLabel }}
   </p>
 
@@ -62,8 +99,8 @@
         <tr>
           <td>{{ $p->number ?? '—' }}</td>
           <td>{{ $p->title }}</td>
-          <td>{{ $p->department->name  ?? '-' }}</td>
-          <td>{{ $p->category->name    ?? '-' }}</td>
+          <td>{{ $p->department->name ?? '-' }}</td>
+          <td>{{ $p->category->name ?? '-' }}</td>
           <td>{{ $p->subcategory->name ?? '-' }}</td>
           <td>{{ $p->status }}</td>
           <td>{{ optional($p->due_date)->format('Y-m-d') }}</td>
@@ -76,4 +113,5 @@
     </tbody>
   </table>
 </body>
+
 </html>

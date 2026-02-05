@@ -40,6 +40,7 @@
       <option value="admin_qc_fitting" @selected(request('role_filter') == 'admin_qc_fitting')>Admin QC Fitting</option>
       <option value="admin_hr" @selected(request('role_filter') == 'admin_hr')>Admin HR</option>
       <option value="admin_k3" @selected(request('role_filter') == 'admin_k3')>Admin K3</option>
+      <option value="admin_mtc" @selected(request('role_filter') == 'admin_mtc')>Admin MTC</option>
     </select>
 
     {{-- Status filter --}}
@@ -68,9 +69,9 @@
           <th>PIC</th>
           <th>Departemen</th>
           <th>Kategori</th>
+          <th>Subkategori</th>
           <th>Status</th>
           <th>Due</th>
-          <th>Aksi</th>
         </tr>
       </thead>
       <tbody>
@@ -93,12 +94,29 @@
             <td class="px-2 py-3">{{ $p->pic->name ?? '-' }}</td>
             <td class="px-2 py-3">{{ $p->department->name ?? '-' }}</td>
 
-            {{-- Kategori / Subkategori --}}
+            {{-- Kategori --}}
             <td class="px-2 py-3">
-              {{ $p->category->name ?? '-' }}
-              @if($p->subcategory)
-                / <span class="text-xs text-gray-500">{{ $p->subcategory->name }}</span>
+              @php
+                $catName = $p->category->name ?? '-';
+                $badgeClass = match ($catName) {
+                  'Efisiensi' => 'bg-emerald-200 text-emerald-900 dark:bg-emerald-700 dark:text-white',
+                  'Uji Coba' => 'bg-blue-200 text-blue-900 dark:bg-blue-700 dark:text-white',
+                  default => null,
+                };
+              @endphp
+
+              @if($badgeClass)
+                <span class="px-2 py-0.5 text-xs font-semibold rounded {{ $badgeClass }}">
+                  {{ $catName }}
+                </span>
+              @else
+                {{ $catName }}
               @endif
+            </td>
+
+            {{-- Subkategori --}}
+            <td class="px-2 py-3">
+              {{ $p->subcategory->name ?? '-' }}
             </td>
 
             {{-- Status badge --}}
@@ -109,19 +127,6 @@
 
             {{-- Due --}}
             <td class="whitespace-nowrap px-2 py-3">{{ optional($p->due_date)->format('Y-m-d') ?? '-' }}</td>
-
-            {{-- Aksi --}}
-            <td class="space-x-2 px-2 py-3">
-              <a href="{{ route('ptk.edit', $p) }}"
-                class="text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 underline decoration-gray-300 hover:decoration-gray-400">
-                Edit
-              </a>
-
-              <a href="{{ route('exports.pdf', $p) }}"
-                class="text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 underline decoration-gray-300 hover:decoration-gray-400">
-                PDF
-              </a>
-            </td>
           </tr>
         @empty
           <tr>
@@ -148,7 +153,7 @@
         order: [[1, 'desc']],
         responsive: true,
         language: { search: "_INPUT_", searchPlaceholder: "Cari PTK..." },
-        columnDefs: [{ targets: -1, orderable: false }]
+
       });
     });
   </script>

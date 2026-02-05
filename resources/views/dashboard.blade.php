@@ -2,6 +2,7 @@
   <div class="space-y-6">
 
     {{-- RINGKASAN KPI --}}
+
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
       <div class="p-4 bg-white dark:bg-gray-800 rounded-xl shadow">
         <div class="text-sm text-gray-500">Total PTK</div>
@@ -123,7 +124,9 @@
                   @endif
                 </td>
                 <td class="py-2 px-3">{{ $row->due_date?->format('Y-m-d') }}</td>
-                <td class="py-2 px-3">{{ $row->status }}</td>
+                <td class="py-2 px-3">
+                  <x-ui.stat-badge :status="$row->status" />
+                </td>
               </tr>
             @empty
               <tr>
@@ -136,168 +139,201 @@
     </div>
 
   </div>
-</x-layouts.app>
 
-{{-- ================= CHART JS ================= --}}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      // DEBUG: Verify Script Run
+      // alert('Chart Script Running!'); 
 
-<script>
-  document.addEventListener('DOMContentLoaded', function () {
+      var statusEl = document.getElementById('js-status');
+      if (statusEl) statusEl.innerText = 'RUNNING...';
 
-    // Helper safe convert to numbers
-    function toNums(arr) {
-      if (Array.isArray(arr)) {
-        return arr.map(function (v) { return Number(v) || 0; });
-      }
-      return [];
-    }
+      try {
+        // ... Logic ...
+        console.log('Initializing Charts...');
 
-    /* =========================================================
-     * LINE CHART — TREN PTK
-     * ========================================================= */
-    (function drawTrend() {
-      var el = document.getElementById('trendChart');
-      if (!el) return;
-
-      var labels = @json($labels ?? []);
-      var months = @json($monthMarks ?? []);
-      var seriesQc = toNums(@json($seriesQc ?? []));
-      var seriesHr = toNums(@json($seriesHr ?? []));
-
-      new Chart(el, {
-        type: 'line',
-        data: {
-          labels: labels,
-          datasets: [
-            {
-              label: 'PTK QC (Kabag QC)',
-              data: seriesQc,
-              borderColor: '#3b82f6',
-              backgroundColor: '#3b82f6',
-              borderWidth: 2,
-              tension: 0.3,
-              pointRadius: 3,
-              fill: false
-            },
-            {
-              label: 'PTK HR (Manager HR)',
-              data: seriesHr,
-              borderColor: '#f97316',
-              backgroundColor: '#f97316',
-              borderWidth: 2,
-              tension: 0.3,
-              pointRadius: 3,
-              fill: false
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: { display: true }
-          },
-          scales: {
-            x: {
-              title: {
-                display: true,
-                text: 'Minggu (26 minggu terakhir)'
-              },
-              ticks: {
-                callback: function (v, i) {
-                  var w = labels[i] || v;
-                  var m = months[i] || '';
-                  return m ? [w, m] : w;
-                },
-                font: { size: 11 }
-              }
-            },
-            y: {
-              beginAtZero: true,
-              ticks: { stepSize: 1 }
-            }
-          }
+        // Debug check
+        if (typeof Chart === 'undefined') {
+          throw new Error('Chart is NOT defined. Library failed to load.');
         }
-      });
-    })();
 
-    /* =========================================================
-     * DONUT CHART — DISTRIBUSI DEPARTEMEN
-     * ========================================================= */
-    (function drawDonut() {
-      var el = document.getElementById('deptDonut');
-      if (!el) return;
+        // Register plugin if not automatically registered
+        if (typeof ChartDataLabels !== 'undefined') {
+          Chart.register(ChartDataLabels);
+        }
 
-      var labels = @json($deptLabels ?? []);
-      var series = toNums(@json($deptSeries ?? []));
+        // Helper safe convert to numbers
+        function toNums(arr) {
+          if (Array.isArray(arr)) {
+            return arr.map(function (v) { return Number(v) || 0; });
+          }
+          return [];
+        }
 
-      // Sum total safely
-      var total = 0;
-      for (var k = 0; k < series.length; k++) {
-        total += series[k];
-      }
+        /* =========================================================
+         * LINE CHART — TREN PTK
+         * ========================================================= */
+        (function drawTrend() {
+          var el = document.getElementById('trendChart');
+          if (!el) {
+            console.error('#trendChart canvas not found');
+            return;
+          }
 
-      if (!labels.length || !series.length || total === 0) {
-        var div = document.createElement('div');
-        div.className = 'text-sm text-gray-400';
-        div.innerText = 'Tidak ada data departemen pada periode ini.';
-        el.parentNode.replaceChild(div, el);
-        return;
-      }
+          var labels = @json($labels ?? []);
+          var months = @json($monthMarks ?? []);
+          var seriesQc = toNums(@json($seriesQc ?? []));
+          var seriesHr = toNums(@json($seriesHr ?? []));
+          var seriesMtc = toNums(@json($seriesMtc ?? []));
 
-      var colors = [
-        '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
-        '#8b5cf6', '#06b6d4', '#f97316', '#22c55e',
-        '#eab308', '#ec4899', '#94a3b8'
-      ];
-
-      new Chart(el, {
-        type: 'doughnut',
-        data: {
-          labels: labels,
-          datasets: [{
-            data: series,
-            backgroundColor: labels.map(function (_, i) {
-              return colors[i % colors.length];
-            }),
-            borderColor: '#ffffff',
-            borderWidth: 2,
-            hoverOffset: 10
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          cutout: '58%',
-          plugins: {
-            legend: {
-              display: false
+          new Chart(el, {
+            type: 'line',
+            data: {
+              labels: labels,
+              datasets: [
+                {
+                  label: 'PTK QC (Kabag QC)',
+                  data: seriesQc,
+                  borderColor: '#3b82f6',
+                  backgroundColor: '#3b82f6',
+                  borderWidth: 2,
+                  tension: 0.3,
+                  pointRadius: 3,
+                  fill: false
+                },
+                {
+                  label: 'PTK HR (Manager HR)',
+                  data: seriesHr,
+                  borderColor: '#f97316',
+                  backgroundColor: '#f97316',
+                  borderWidth: 2,
+                  tension: 0.3,
+                  pointRadius: 3,
+                  fill: false
+                },
+                {
+                  label: 'PTK MTC (Kabag MTC)',
+                  data: seriesMtc,
+                  borderColor: '#10b981', // Green
+                  backgroundColor: '#10b981',
+                  borderWidth: 2,
+                  tension: 0.3,
+                  pointRadius: 3,
+                  fill: false
+                }
+              ]
             },
-            tooltip: {
-              callbacks: {
-                label: function (ctx) {
-                  var val = ctx.parsed || 0;
-                  var pct = ((val / total) * 100).toFixed(1);
-                  return ctx.label + ': ' + val + ' (' + pct + '%)';
+            options: {
+              responsive: true,
+              plugins: {
+                legend: { display: true } // Ensure legend is on
+              },
+              scales: {
+                x: {
+                  title: {
+                    display: true,
+                    text: 'Minggu (26 minggu terakhir)'
+                  },
+                  ticks: {
+                    callback: function (v, i) {
+                      var w = labels[i] || v;
+                      var m = months[i] || '';
+                      return m ? [w, m] : w;
+                    },
+                    font: { size: 11 }
+                  }
+                },
+                y: {
+                  beginAtZero: true,
+                  ticks: { stepSize: 1 }
+                }
+              }
+            }
+          });
+        })();
+
+        /* =========================================================
+         * DONUT CHART — DISTRIBUSI DEPARTEMEN
+         * ========================================================= */
+        (function drawDonut() {
+          var el = document.getElementById('deptDonut');
+          if (!el) return;
+
+          var labels = @json($deptLabels ?? []);
+          var series = toNums(@json($deptSeries ?? []));
+
+          // Sum total safely
+          var total = 0;
+          for (var k = 0; k < series.length; k++) {
+            total += series[k];
+          }
+
+          if (!labels.length || !series.length || total === 0) {
+            // Optional: Show empty state
+            // el.style.display = 'none';
+            // return;
+            var div = document.createElement('div');
+            div.className = 'text-sm text-gray-400';
+            div.innerText = 'Tidak ada data departemen pada periode ini.';
+            el.parentNode.replaceChild(div, el);
+            return;
+          }
+
+          var colors = [
+            '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
+            '#8b5cf6', '#06b6d4', '#f97316', '#22c55e',
+            '#eab308', '#ec4899', '#94a3b8'
+          ];
+
+          new Chart(el, {
+            type: 'doughnut',
+            data: {
+              labels: labels,
+              datasets: [{
+                data: series,
+                backgroundColor: labels.map(function (_, i) {
+                  return colors[i % colors.length];
+                }),
+                borderColor: '#ffffff',
+                borderWidth: 2,
+                hoverOffset: 10
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              cutout: '58%',
+              plugins: {
+                legend: { display: false },
+                // Enable datalabels locally
+                datalabels: {
+                  color: '#ffffff',
+                  font: { weight: '700', size: 13 },
+                  formatter: function (value) {
+                    return value > 0 ? value : '';
+                  }
                 }
               }
             },
-            datalabels: {
-              color: '#ffffff',
-              font: {
-                weight: '700',
-                size: 13
-              },
-              formatter: function (value) {
-                var pct = Math.round((value / total) * 100);
-                return pct >= 3 ? pct + '%' : '';
-              }
-            }
-          }
-        },
-        plugins: [ChartDataLabels]
-      });
-    })();
+            plugins: [ChartDataLabels] // Global reg might handle this, but safe to add
+          });
+        })();
 
-  });
-</script>
+        if (statusEl) statusEl.innerText = 'FINISHED (OK)';
+
+      } catch (err) {
+        console.error('Chart Error:', err);
+        // Show error in the chart container so it's visible
+        var el = document.getElementById('trendChart');
+        if (el) {
+          var errDiv = document.createElement('div');
+          errDiv.style.color = 'red';
+          errDiv.style.padding = '20px';
+          errDiv.style.textAlign = 'center';
+          errDiv.innerText = 'Gagal memuat grafik: ' + err.message;
+          el.parentNode.replaceChild(errDiv, el);
+        }
+      }
+    });
+  </script>
+</x-layouts.app>

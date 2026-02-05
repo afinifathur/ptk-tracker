@@ -17,7 +17,7 @@ class DashboardController extends Controller
         // Periode 26 minggu ke belakang
         // =========================================================
         $from = now()->subWeeks(26)->startOfWeek();
-        $to   = now();
+        $to = now();
 
         // Base query (visibility)
         $base = PTK::visibleTo($user);
@@ -25,26 +25,25 @@ class DashboardController extends Controller
         // =========================================================
         // KPI Ringkas
         // =========================================================
-        $total      = (clone $base)->count();
-        $completed  = (clone $base)->where('status', 'Completed')->count();
+        $total = (clone $base)->count();
+        $completed = (clone $base)->where('status', 'Completed')->count();
         $inProgress = (clone $base)->where('status', 'In Progress')->count();
-        $overdue    = (clone $base)
+        $overdue = (clone $base)
             ->where('status', '!=', 'Completed')
             ->whereDate('due_date', '<', today())
             ->count();
 
         // =========================================================
-        // Tren Mingguan (QC vs HR) — FIX FINAL
+        // Tren Mingguan (QC vs HR vs MTC) — FIX FINAL
         // =========================================================
-        $qcRoles = ['admin_qc_flange', 'admin_qc_fitting'];
-        $hrRoles = ['admin_hr', 'admin_k3'];
+        $qcRoles = ['admin_qc_flange', 'admin_qc_fitting', 'kabag_qc'];
+        $hrRoles = ['admin_hr', 'admin_k3', 'manager_hr'];
+        $mtcRoles = ['admin_mtc', 'kabag_mtc'];
 
         // Ambil user_id berdasarkan role
-        $qcUserIds = User::whereHas('roles', fn ($q) => $q->whereIn('name', $qcRoles))
-            ->pluck('id');
-
-        $hrUserIds = User::whereHas('roles', fn ($q) => $q->whereIn('name', $hrRoles))
-            ->pluck('id');
+        $qcUserIds = User::whereHas('roles', fn($q) => $q->whereIn('name', $qcRoles))->pluck('id');
+        $hrUserIds = User::whereHas('roles', fn($q) => $q->whereIn('name', $hrRoles))->pluck('id');
+        $mtcUserIds = User::whereHas('roles', fn($q) => $q->whereIn('name', $mtcRoles))->pluck('id');
 
         // Base tren (periode sama, form_date)
         $trendBase = (clone $base)
@@ -67,32 +66,50 @@ class DashboardController extends Controller
             ->groupBy('yw')
             ->pluck('c', 'yw');
 
+        // MTC series
+        $seriesMtcRaw = (clone $trendBase)
+            ->whereIn('created_by', $mtcUserIds)
+            ->selectRaw('YEARWEEK(form_date, 3) as yw, COUNT(*) as c')
+            ->groupBy('yw')
+            ->pluck('c', 'yw');
+
         // Build minggu (26 minggu)
         $weeks = collect(CarbonPeriod::create($from, '1 week', $to))
-            ->map(fn ($w) => $w->copy()->startOfWeek());
+            ->map(fn($w) => $w->copy()->startOfWeek());
 
-        $labels   = [];
+        $labels = [];
         $seriesQc = [];
         $seriesHr = [];
+        $seriesMtc = [];
 
         foreach ($weeks as $week) {
             $yw = (int) $week->format('oW');
-            $labels[]   = $week->format('W');
+            $labels[] = $week->format('W');
             $seriesQc[] = (int) ($seriesQcRaw[$yw] ?? 0);
             $seriesHr[] = (int) ($seriesHrRaw[$yw] ?? 0);
+            $seriesMtc[] = (int) ($seriesMtcRaw[$yw] ?? 0);
         }
 
         // =========================================================
         // Penanda Bulan (Chart)
         // =========================================================
         $indoMonths = [
-            1 => 'Jan', 2 => 'Feb', 3 => 'Mar', 4 => 'Apr',
-            5 => 'Mei', 6 => 'Jun', 7 => 'Jul', 8 => 'Ags',
-            9 => 'Sep', 10 => 'Okt', 11 => 'Nop', 12 => 'Des',
+            1 => 'Jan',
+            2 => 'Feb',
+            3 => 'Mar',
+            4 => 'Apr',
+            5 => 'Mei',
+            6 => 'Jun',
+            7 => 'Jul',
+            8 => 'Ags',
+            9 => 'Sep',
+            10 => 'Okt',
+            11 => 'Nop',
+            12 => 'Des',
         ];
 
         $monthMarks = [];
-        $prevMonth  = null;
+        $prevMonth = null;
 
         foreach ($weeks as $week) {
             $m = (int) $week->format('n');
@@ -112,7 +129,7 @@ class DashboardController extends Controller
             ->count();
 
         $slaTotal = (clone $slaBase)->count();
-        $slaPct   = $slaTotal ? round($slaOnTime * 100 / $slaTotal, 1) : 0;
+        $slaPct = $slaTotal ? round($slaOnTime * 100 / $slaTotal, 1) : 0;
 
         // =========================================================
         // Top Department / Category / Subcategory (6 bulan)
@@ -126,8 +143,8 @@ class DashboardController extends Controller
             ->orderByDesc('total')
             ->limit(3)
             ->get()
-            ->map(fn ($r) => [
-                'name'  => $r->department->name ?? '-',
+            ->map(fn($r) => [
+                'name' => $r->department->name ?? '-',
                 'total' => (int) $r->total,
             ]);
 
@@ -138,8 +155,8 @@ class DashboardController extends Controller
             ->orderByDesc('total')
             ->limit(3)
             ->get()
-            ->map(fn ($r) => [
-                'name'  => $r->category->name ?? '-',
+            ->map(fn($r) => [
+                'name' => $r->category->name ?? '-',
                 'total' => (int) $r->total,
             ]);
 
@@ -151,8 +168,8 @@ class DashboardController extends Controller
             ->orderByDesc('total')
             ->limit(3)
             ->get()
-            ->map(fn ($r) => [
-                'name'  => $r->subcategory->name ?? '-',
+            ->map(fn($r) => [
+                'name' => $r->subcategory->name ?? '-',
                 'total' => (int) $r->total,
             ]);
 
@@ -176,7 +193,7 @@ class DashboardController extends Controller
         // Donut: PTK per Departemen (6 bulan)
         // =========================================================
         $donutFrom = now()->subMonths(6)->startOfDay();
-        $donutTo   = now()->endOfDay();
+        $donutTo = now()->endOfDay();
 
         $deptCounts = (clone $base)
             ->with('department:id,name')
@@ -185,8 +202,8 @@ class DashboardController extends Controller
             ->groupBy('department_id')
             ->orderByDesc('total')
             ->get()
-            ->map(fn ($r) => [
-                'name'  => $r->department->name ?? '-',
+            ->map(fn($r) => [
+                'name' => $r->department->name ?? '-',
                 'total' => (int) $r->total,
             ]);
 
@@ -194,30 +211,31 @@ class DashboardController extends Controller
         // Render
         // =========================================================
         return view('dashboard', [
-            'total'            => $total,
-            'inProgress'       => $inProgress,
-            'completed'        => $completed,
-            'overdue'          => $overdue,
+            'total' => $total,
+            'inProgress' => $inProgress,
+            'completed' => $completed,
+            'overdue' => $overdue,
 
             // chart tren
-            'labels'           => $labels,
-            'seriesQc'         => $seriesQc,
-            'seriesHr'         => $seriesHr,
-            'monthMarks'       => $monthMarks,
+            'labels' => $labels,
+            'seriesQc' => $seriesQc,
+            'seriesHr' => $seriesHr,
+            'seriesMtc' => $seriesMtc,
+            'monthMarks' => $monthMarks,
 
-            'slaPct'           => $slaPct,
-            'topDepartments'   => $topDepartments,
-            'topCategories'    => $topCategories,
+            'slaPct' => $slaPct,
+            'topDepartments' => $topDepartments,
+            'topCategories' => $topCategories,
             'topSubcategories' => $topSubcategories,
-            'from'             => $from,
-            'to'               => $to,
-            'overdueTop'       => $overdueTop,
+            'from' => $from,
+            'to' => $to,
+            'overdueTop' => $overdueTop,
 
             // donut
-            'deptLabels'       => $deptCounts->pluck('name')->toArray(),
-            'deptSeries'       => $deptCounts->pluck('total')->toArray(),
-            'donutFrom'        => $donutFrom,
-            'donutTo'          => $donutTo,
+            'deptLabels' => $deptCounts->pluck('name')->toArray(),
+            'deptSeries' => $deptCounts->pluck('total')->toArray(),
+            'donutFrom' => $donutFrom,
+            'donutTo' => $donutTo,
         ]);
     }
 }
