@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <meta charset="utf-8">
   <title>Verifikasi Dokumen PTK</title>
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.0/dist/tailwind.min.css" rel="stylesheet">
+  @vite(['resources/css/app.css'])
 </head>
+
 <body class="bg-gray-50 text-gray-800 min-h-screen flex items-center justify-center">
   <div class="bg-white shadow p-8 rounded-lg w-[600px] text-center">
     <h1 class="text-2xl font-bold mb-4">Verifikasi Dokumen PTK</h1>
@@ -26,4 +28,5 @@
     </div>
   </div>
 </body>
+
 </html>

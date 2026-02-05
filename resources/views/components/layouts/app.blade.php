@@ -117,8 +117,8 @@
           Laporan Periode
         </a>
 
-        {{-- ===== ADMIN INPUT (QC / HR / K3) ===== --}}
-        @hasanyrole('admin_qc_flange|admin_qc_fitting|admin_hr|admin_k3')
+        {{-- ===== ADMIN INPUT (QC / HR / K3 / MTC) ===== --}}
+        @hasanyrole('admin_qc_flange|admin_qc_fitting|admin_hr|admin_k3|admin_mtc')
         @can('ptk.create')
           <a href="{{ route('ptk.create') }}"
             class="px-2 py-1 {{ request()->routeIs('ptk.create') ? 'font-semibold border-b-2 border-indigo-600' : '' }}">
@@ -133,7 +133,7 @@
         @endhasanyrole
 
         {{-- ===== KABAG / MANAGER / DIRECTOR ===== --}}
-        @hasanyrole('kabag_qc|manager_hr|director')
+        @hasanyrole('kabag_qc|kabag_mtc|manager_hr|director')
         @can('menu.queue')
           <a href="{{ route('ptk.queue') }}"
             class="relative px-2 py-1 {{ request()->routeIs('ptk.queue*') ? 'font-semibold border-b-2 border-indigo-600' : '' }}">
@@ -232,6 +232,7 @@
   <script src="{{ asset('vendor/datatables/jquery.dataTables.min.js') }}"></script>
   <script src="{{ asset('vendor/datatables/dataTables.bootstrap5.min.js') }}"></script>
   <script src="{{ asset('vendor/chartjs/chart.umd.min.js') }}"></script>
+  <script src="{{ asset('vendor/chartjs/chartjs-plugin-datalabels.min.js') }}"></script>
   <script src="{{ asset('vendor/alpine/alpine.min.js') }}" defer></script>
 
   @stack('scripts')
